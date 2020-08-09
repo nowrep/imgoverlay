@@ -83,7 +83,6 @@ void parseConfigFile(overlay_params& params) {
             parseConfigLine(line, params.options);
         }
         std::cerr << " [ ok ]" << std::endl;
-        params.config_file_path = *p;
         return;
     }
 }

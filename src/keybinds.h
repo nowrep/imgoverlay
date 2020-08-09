@@ -4,6 +4,7 @@
 
 #include "shared_x11.h"
 #include "loaders/loader_x11.h"
+#include "timing.hpp"
 
 #ifndef KeySym
 typedef unsigned long KeySym;

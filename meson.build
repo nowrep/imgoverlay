@@ -78,20 +78,10 @@ vulkan_wsi_args = []
 vulkan_wsi_deps = []
 
 dep_x11 = dependency('x11', required: get_option('with_x11'))
-dep_wayland_client = dependency('wayland-client',
-    required: get_option('with_wayland'), version : '>=1.11')
 
 if dep_x11.found()
   vulkan_wsi_args += ['-DVK_USE_PLATFORM_XLIB_KHR']
   vulkan_wsi_deps += dep_x11.partial_dependency(compile_args : true, includes : true)
-endif
-if dep_wayland_client.found()
-  vulkan_wsi_args += ['-DVK_USE_PLATFORM_WAYLAND_KHR']
-  vulkan_wsi_deps += dep_wayland_client
-endif
-
-if not dep_x11.found() and not dep_wayland_client.found()
-  error('At least one of "with_x11" and "with_wayland" should be enabled')
 endif
 
 inc_common = [
@@ -100,7 +90,6 @@ inc_common = [
 
 dep_vulkan = dependency('vulkan', required: get_option('use_system_vulkan'))
 dep_pthread = dependency('threads')
-dbus_dep = dependency('dbus-1', required: get_option('with_dbus')).partial_dependency(compile_args : true, includes : true)
 
 # Check for generic C arguments
 c_args = []
@@ -208,4 +197,3 @@ dearimgui_sp = subproject('dearimgui')
 dearimgui_dep = dearimgui_sp.get_variable('dearimgui_dep')
 
 subdir('src')
-subdir('data')

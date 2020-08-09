@@ -23,64 +23,20 @@ vklayer_files = files(
   'overlay_params.cpp',
   'font_unispace.c',
   'blacklist.cpp',
-  'cpu.cpp',
   'file_utils.cpp',
-  'memory.cpp',
   'config.cpp',
-  'iostats.cpp',
-  'gpu.cpp',
-  'notify.cpp',
-  'elfhacks.cpp',
-  'real_dlsym.cpp',
-  'pci_ids.cpp',
-  'logging.cpp',
 )
 
-opengl_files = files(
-  'gl/glad.c',
-  'gl/imgui_impl_opengl3.cpp',
-  'gl/imgui_hud.cpp',
-  'gl/inject_egl.cpp',
-)
+#opengl_files = files(
+#  'gl/glad.c',
+#  'gl/imgui_impl_opengl3.cpp',
+#  'gl/imgui_hud.cpp',
+#  'gl/inject_egl.cpp',
+#)
 
-if get_option('with_dlsym').enabled()
-    pre_args += '-DHOOK_DLSYM'
-endif
-
-nvml_h_found = get_option('with_nvml') == 'enabled'
-if get_option('with_nvml') == 'system'
-  nvml_h_found = cc.has_header('nvml.h')
-  if not nvml_h_found
-    error('nvml.h was not found. Disable with \'-Dwith_nvml=disabled\' if gpu stats by NVML is not needed.')
-  endif
-  pre_args += '-DUSE_SYSTEM_NVML'
-endif
-
-if nvml_h_found
-  pre_args += '-DHAVE_NVML'
-  vklayer_files += files(
-    'nvml.cpp',
-    'loaders/loader_nvml.cpp',
-  )
-endif
-
-if get_option('with_xnvctrl').enabled()
-
-  if not get_option('with_x11').enabled()
-    error('XNVCtrl also needs \'with_x11\'')
-  endif
-
-  xnvctrl_h_found = cc.has_header('NVCtrl/NVCtrl.h')
-  if not xnvctrl_h_found
-    error('NVCtrl.h was not found. Disable with \'-Dwith_xnvctrl=disabled\' if gpu stats by XNVCtrl is not needed.')
-  endif
-
-  pre_args += '-DHAVE_XNVCTRL'
-  vklayer_files += files(
-    'loaders/loader_nvctrl.cpp',
-    'nvctrl.cpp',
-  )
-endif
+#if get_option('with_dlsym').enabled()
+#    pre_args += '-DHOOK_DLSYM'
+#endif
 
 if get_option('with_x11').enabled()
   pre_args += '-DHAVE_X11'
@@ -90,18 +46,10 @@ if get_option('with_x11').enabled()
     'shared_x11.cpp',
   )
 
-  opengl_files += files(
-    'loaders/loader_glx.cpp',
-    'gl/inject_glx.cpp',
-  )
-endif
-
-if dbus_dep.found() and get_option('with_dbus').enabled()
-  pre_args += '-DHAVE_DBUS'
-  vklayer_files += files(
-    'dbus.cpp',
-    'loaders/loader_dbus.cpp',
-  )
+  #  opengl_files += files(
+  #    'loaders/loader_glx.cpp',
+  #    'gl/inject_glx.cpp',
+  #  )
 endif
 
 link_args = cc.get_supported_link_arguments(['-Wl,-Bsymbolic-functions', '-Wl,-z,relro', '-Wl,--exclude-libs,ALL'])
@@ -114,7 +62,7 @@ vklayer_mesa_overlay = shared_library(
   util_files,
   vk_enum_to_str,
   vklayer_files,
-  opengl_files,
+  # opengl_files,
   overlay_spv,
   c_args : [
     pre_args,
@@ -129,7 +77,6 @@ vklayer_mesa_overlay = shared_library(
   dependencies : [
     vulkan_wsi_deps,
     dearimgui_dep,
-    dbus_dep,
     dep_dl,
     dep_rt,
     dep_pthread,
@@ -140,27 +87,27 @@ vklayer_mesa_overlay = shared_library(
   install : true
 )
 
-mangohud_dlsym = shared_library(
-  'MangoHud_dlsym',
-  files(
-    'elfhacks.cpp',
-    'real_dlsym.cpp',
-    'hook_dlsym.cpp',
-  ),
-  c_args : [
-    pre_args,
-    no_override_init_args,
-    ],
-  cpp_args : [
-    pre_args,
-    ],
-  gnu_symbol_visibility : 'hidden',
-  dependencies : [dep_dl],
-  include_directories : [inc_common],
-  link_args : link_args,
-  install_dir : libdir_mangohud,
-  install : true
-)
+#mangohud_dlsym = shared_library(
+#  'MangoHud_dlsym',
+#  files(
+#    'elfhacks.cpp',
+#    'real_dlsym.cpp',
+#    'hook_dlsym.cpp',
+#  ),
+#  c_args : [
+#    pre_args,
+#    no_override_init_args,
+#    ],
+#  cpp_args : [
+#    pre_args,
+#    ],
+#  gnu_symbol_visibility : 'hidden',
+#  dependencies : [dep_dl],
+#  include_directories : [inc_common],
+#  link_args : link_args,
+#  install_dir : libdir_mangohud,
+#  install : true
+#)
 
 configure_file(input : 'mangohud.json.in',
   output : '@0@.@1@.json'.format(meson.project_name(), target_machine.cpu_family()),
@@ -185,11 +132,3 @@ configure_file(input : '../bin/mangohud.in',
   configuration : {'libdir_mangohud' : libdir_mangohud, 'mangohud_sh' : mangohud_opposite_bin},
   install_dir : get_option('bindir'),
 )
-
-if get_option('include_doc')
-  install_data(
-    files('../bin/MangoHud.conf'),
-    install_dir : join_paths(get_option('datadir'), 'doc', 'mangohud'),
-    rename : ['MangoHud.conf.example']
-  )
-endif
