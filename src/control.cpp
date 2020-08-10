@@ -30,6 +30,7 @@ struct msg_create_image {
     uint32_t y;
     uint32_t width;
     uint32_t height;
+    uint8_t visible;
     uint32_t pixels_size; // width * height * 4 bytes
     uint8_t pixels[0];
 };
@@ -38,6 +39,7 @@ struct msg_update_image {
     uint8_t id;
     uint32_t x;
     uint32_t y;
+    uint8_t visible;
     uint32_t pixels_size; // width * height * 4 bytes
     uint8_t pixels[0];
 };
@@ -148,18 +150,19 @@ uint32_t Control::processCreateImageMsg(struct msg_struct *msg)
         return STATUS_ERROR;
     }
 
+#ifndef NDEBUG
+    std::cout << "::Create image " << (unsigned)m->id << std::endl;
+#endif
+
     OverlayImage img;
     img.x = m->x;
     img.y = m->y;
     img.width = m->width;
     img.height = m->height;
+    img.visible = m->visible == 1;
     img.pixels = m->pixels;
     img.to_free = msg;
     m_images.insert({m->id, img});
-
-#ifndef NDEBUG
-    std::cout << "::Create image " << (unsigned)m->id << std::endl;
-#endif
 
     return STATUS_OK;
 }
@@ -175,7 +178,7 @@ uint32_t Control::processUpdateImageMsg(struct msg_struct *msg)
         return STATUS_ERROR;
     }
 
-    if (m->pixels_size != (it->second.width * it->second.height * sizeof(uint32_t))) {
+    if (m->pixels_size > 0 && m->pixels_size != (it->second.width * it->second.height * sizeof(uint32_t))) {
         std::cerr << "Invalid pixels_size: " << m->pixels_size << std::endl;
         free(msg);
         return STATUS_ERROR;
@@ -183,15 +186,21 @@ uint32_t Control::processUpdateImageMsg(struct msg_struct *msg)
 
     // XXX: Validate pixels_size <> m_msgSize
 
-    free(it->second.to_free);
-    it->second.x = m->x;
-    it->second.y = m->y;
-    it->second.pixels = m->pixels;
-    it->second.to_free = msg;
-
 #ifndef NDEBUG
     std::cout << "::Update image " << (unsigned)m->id << std::endl;
 #endif
+
+    it->second.x = m->x;
+    it->second.y = m->y;
+    it->second.visible = m->visible;
+
+    if (m->pixels_size > 0) {
+        free(it->second.to_free);
+        it->second.pixels = m->pixels;
+        it->second.to_free = msg;
+    } else {
+        free(msg);
+    }
 
     return STATUS_OK;
 }

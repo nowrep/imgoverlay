@@ -464,7 +464,9 @@ void render_imgui(struct swapchain_data *data)
         const uint8_t id = it.first;
         const OverlayImage &img = it.second;
         const swapchain_data::image_data &img_data = data->images_data[id];
-
+        if (!img.visible) {
+            continue;
+        }
         ImGui::SetNextWindowBgAlpha(0.0);
         ImGui::SetNextWindowPos(ImVec2(img.x, img.y), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(img.width + 10, img.height + 10), ImGuiCond_Always);
