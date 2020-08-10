@@ -30,6 +30,7 @@ private:
     uint32_t processCreateImageMsg(struct msg_struct *msg);
     uint32_t processUpdateImageMsg(struct msg_struct *msg);
     uint32_t processDestroyImageMsg(struct msg_struct *msg);
+    uint32_t processDestroyAllImagesMsg(struct msg_struct *msg);
 
     static void run(Control *c);
 

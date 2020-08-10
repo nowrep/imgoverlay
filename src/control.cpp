@@ -22,6 +22,7 @@ enum msg_type {
     MSG_CREATE_IMAGE        = 1,
     MSG_UPDATE_IMAGE        = 2,
     MSG_DESTROY_IMAGE       = 3,
+    MSG_DESTROY_ALL_IMAGES  = 4,
 };
 
 struct msg_create_image {
@@ -126,6 +127,8 @@ uint32_t Control::processMsg(struct msg_struct *msg)
         return processUpdateImageMsg(msg);
     case MSG_DESTROY_IMAGE:
         return processDestroyImageMsg(msg);
+    case MSG_DESTROY_ALL_IMAGES:
+        return processDestroyAllImagesMsg(msg);
     default:
         std::cerr << "Invalid msg type " << msg->type << std::endl;
         return STATUS_ERROR;
@@ -216,14 +219,28 @@ uint32_t Control::processDestroyImageMsg(struct msg_struct *msg)
         return STATUS_ERROR;
     }
 
-    free(it->second.to_free);
-    m_images.erase(it);
-
 #ifndef NDEBUG
     std::cout << "::Destroy image " << (unsigned)m->id << std::endl;
 #endif
 
+    free(it->second.to_free);
+    m_images.erase(it);
+
     free(msg);
+    return STATUS_OK;
+}
+
+uint32_t Control::processDestroyAllImagesMsg(struct msg_struct *msg)
+{
+#ifndef NDEBUG
+    std::cout << "::Destroy all images " << std::endl;
+#endif
+
+    for (auto it : m_images) {
+        free(it.second.to_free);
+    }
+    m_images.clear();
+
     return STATUS_OK;
 }
 
