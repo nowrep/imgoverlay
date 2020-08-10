@@ -3,8 +3,14 @@
 #include "mesa/util/os_socket.h"
 
 #include <unistd.h>
+#include <string.h>
 #include <thread>
 #include <chrono>
+#include <iostream>
+
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0x4000
+#endif
 
 enum status {
     STATUS_OK = 0,
@@ -49,50 +55,133 @@ struct msg_struct {
     };
 };
 
-static int create_image(struct overlay_data *data, struct msg_struct *msg)
+Control::Control(const std::string &socketPath)
+    : m_socketPath(socketPath)
+{
+    m_thread = std::thread(&Control::run, this);
+}
+
+Control::~Control()
+{
+    m_quit = true;
+    if (m_thread.joinable()) {
+        m_thread.join();
+    }
+}
+
+const std::unordered_map<uint8_t, OverlayImage> &Control::images() const
+{
+    return m_images;
+}
+
+void Control::processSocket()
+{
+    m_mutex.lock();
+
+    uint8_t *buf = m_buffer;
+    size_t size = m_bufferPos;
+    while (size > 0) {
+        // Read message size
+        if (m_msgSize == 0 || m_msgSizePos > 0) {
+            size_t remain = std::min(sizeof(uint32_t) - m_msgSizePos, size);
+            memcpy(&reinterpret_cast<uint8_t*>(&m_msgSize)[m_msgSizePos], buf, remain);
+            m_msgSizePos += remain;
+            buf += remain;
+            size -= remain;
+            if (m_msgSizePos != sizeof(uint32_t)) {
+                continue;
+            }
+            m_msgSizePos = 0;
+        }
+        // XXX: Validate msg size
+        if (!m_msg) {
+            m_msg = static_cast<uint8_t*>(malloc(m_msgSize));
+        }
+        size_t remain = std::min(m_msgSize - m_msgPos, size);
+        memcpy(&m_msg[m_msgPos], buf, remain);
+        m_msgPos += remain;
+        buf += remain;
+        size -= remain;
+        if (m_msgPos == m_msgSize) {
+            uint32_t ret = processMsg(reinterpret_cast<struct msg_struct*>(m_msg));
+            os_socket_send(m_client, &ret, sizeof(uint32_t), MSG_NOSIGNAL);
+            m_msgSize = 0;
+            m_msgPos = 0;
+            m_msg = nullptr;
+        }
+    }
+    m_bufferPos = 0;
+
+    m_mutex.unlock();
+}
+
+uint32_t Control::processMsg(struct msg_struct *msg)
+{
+    switch (msg->type) {
+    case MSG_CREATE_IMAGE:
+        return processCreateImageMsg(msg);
+    case MSG_UPDATE_IMAGE:
+        return processUpdateImageMsg(msg);
+    case MSG_DESTROY_IMAGE:
+        return processDestroyImageMsg(msg);
+    default:
+        std::cerr << "Invalid msg type " << msg->type << std::endl;
+        return STATUS_ERROR;
+    }
+}
+
+uint32_t Control::processCreateImageMsg(struct msg_struct *msg)
 {
     struct msg_create_image *m = &msg->create_image;
 
     if (m->pixels_size != (m->width * m->height * sizeof(uint32_t))) {
-        printf("Invalid pixels size %i\n", m->pixels_size);
+        std::cerr << "Invalid pixels_size: " << m->pixels_size << std::endl;
+        free(msg);
         return STATUS_ERROR;
     }
 
-    auto it = data->images.find(m->id);
-    if (it != data->images.end()) {
-        printf("Already have id %i\n", (int)m->id);
+    // XXX: Validate pixels_size <> m_msgSize
+
+    auto it = m_images.find(m->id);
+    if (it != m_images.end()) {
+        std::cerr << "Already have image with id " << m->id << std::endl;
         return STATUS_ERROR;
     }
 
-    struct overlay_data::image img;
+    OverlayImage img;
     img.x = m->x;
     img.y = m->y;
     img.width = m->width;
     img.height = m->height;
     img.pixels = m->pixels;
     img.to_free = msg;
+    m_images.insert({m->id, img});
 
-    data->images.insert({m->id, img});
-    data->images_changes.push_back({m->id, overlay_data::image_created});
-    data->images_changes.push_back({m->id, overlay_data::image_updated});
+#ifndef NDEBUG
+    std::cout << "::Create image " << (unsigned)m->id << std::endl;
+#endif
 
     return STATUS_OK;
-};
+}
 
-static int update_image(struct overlay_data *data, struct msg_struct *msg)
+uint32_t Control::processUpdateImageMsg(struct msg_struct *msg)
 {
     struct msg_update_image *m = &msg->update_image;
 
-    auto it = data->images.find(m->id);
-    if (it == data->images.end()) {
-        printf("Invalid id %i\n", (int)m->id);
+    auto it = m_images.find(m->id);
+    if (it == m_images.end()) {
+        std::cerr << "Unknown id " << m->id << std::endl;
+        free(msg);
         return STATUS_ERROR;
     }
 
     if (m->pixels_size != (it->second.width * it->second.height * sizeof(uint32_t))) {
-        printf("Invalid pixels size %i\n", m->pixels_size);
+        std::cerr << "Invalid pixels_size: " << m->pixels_size << std::endl;
+        free(msg);
         return STATUS_ERROR;
     }
+
+    // XXX: Validate pixels_size <> m_msgSize
 
     free(it->second.to_free);
     it->second.x = m->x;
@@ -100,192 +189,108 @@ static int update_image(struct overlay_data *data, struct msg_struct *msg)
     it->second.pixels = m->pixels;
     it->second.to_free = msg;
 
-    data->images_changes.push_back({m->id, overlay_data::image_updated});
+#ifndef NDEBUG
+    std::cout << "::Update image " << (unsigned)m->id << std::endl;
+#endif
 
     return STATUS_OK;
-};
+}
 
-static int destroy_image(struct overlay_data *data, struct msg_struct *msg)
+uint32_t Control::processDestroyImageMsg(struct msg_struct *msg)
 {
     struct msg_destroy_image *m = &msg->destroy_image;
 
-    auto it = data->images.find(m->id);
-    if (it == data->images.end()) {
-        printf("Invalid id %i\n", (int)m->id);
+    auto it = m_images.find(m->id);
+    if (it == m_images.end()) {
+        std::cerr << "Unknown id " << m->id << std::endl;
+        free(msg);
         return STATUS_ERROR;
     }
 
     free(it->second.to_free);
-    data->images.erase(it);
-    data->images_changes.push_back({m->id, overlay_data::image_destroyed});
+    m_images.erase(it);
+
+#ifndef NDEBUG
+    std::cout << "::Destroy image " << (unsigned)m->id << std::endl;
+#endif
 
     free(msg);
-
     return STATUS_OK;
-};
-
-static int process_msg(struct overlay_data *data, struct msg_struct *msg)
-{
-    switch (msg->type) {
-    case MSG_CREATE_IMAGE:
-        return create_image(data, msg);
-    case MSG_UPDATE_IMAGE:
-        return update_image(data, msg);
-    case MSG_DESTROY_IMAGE:
-        return destroy_image(data, msg);
-    default:
-        printf("Invalid msg type %i\n", msg->type);
-        return STATUS_ERROR;
-    }
 }
 
-static void process_buf(struct control_thread &data, int client, uint8_t *buf, size_t size)
+// static
+void Control::run(Control *c)
 {
-    while (size > 0) {
-        // Read message size
-        if (data.msg_size == 0 || data.msg_size_pos > 0) {
-            size_t remain = std::min(sizeof(uint32_t) - data.msg_size_pos, size);
-            memcpy(&reinterpret_cast<uint8_t*>(&data.msg_size)[data.msg_size_pos], buf, remain);
-            data.msg_size_pos += remain;
-            buf += remain;
-            size -= remain;
-            if (data.msg_size_pos != sizeof(uint32_t)) {
-                continue;
-            }
-            data.msg_size_pos = 0;
-        }
-        // Allocate message buffer
-        if (!data.current_msg) {
-            data.current_msg = (uint8_t*)malloc(data.msg_size);
-        }
-        size_t remain = std::min(data.msg_size - data.current_msg_pos, size);
-        memcpy(&data.current_msg[data.current_msg_pos], buf, remain);
-        data.current_msg_pos += remain;
-        buf += remain;
-        size -= remain;
-        if (data.current_msg_pos == data.msg_size) {
-            uint32_t ret = process_msg(data.ov_data, (msg_struct*)data.current_msg);
-            os_socket_send(client, &ret, sizeof(uint32_t), 0x4000); // MSG_NOSIGNAL
-            data.msg_size = 0;
-            data.current_msg_pos = 0;
-            data.current_msg = nullptr;
-        }
-    }
-}
-
-static void destroy_images(struct overlay_data *data)
-{
-    for (auto it = data->images.cbegin(); it != data->images.cend(); ++it) {
-        free(it->second.to_free);
-        data->images_changes.push_back({it->first, overlay_data::image_destroyed});
-    }
-    data->images.clear();
-}
-
-static void control_thread_run(void *params)
-{
-    static const size_t BUFSIZE = 5 * 1024 * 1024;
-
-    struct control_thread *data = (struct control_thread*) params;
-
-    data->mutex.lock();
-    data->buffer = (uint8_t*) malloc(BUFSIZE);
-    data->buffer_pos = 0;
-    data->mutex.unlock();
-
-    unlink(data->socket_path.c_str());
-    int listen_socket = os_socket_listen_abstract(data->socket_path.c_str(), 1);
+    unlink(c->m_socketPath.c_str());
+    int listen_socket = os_socket_listen_abstract(c->m_socketPath.c_str(), 1);
     if (listen_socket < 0) {
-        fprintf(stderr, "ERROR: Couldn't create socket pipe at '%s'\n", data->socket_path.c_str());
-        fprintf(stderr, "ERROR: '%s'\n", strerror(errno));
+        std::cerr << "Couldn't create socket at " << c->m_socketPath << ": " << strerror(errno) << std::endl;
         return;
     }
     os_socket_block(listen_socket, false);
 
+    c->m_mutex.lock();
+    c->m_buffer = new uint8_t[c->m_bufferAlloc];
+    c->m_mutex.unlock();
+
     while (true) {
-        if (data->thread_quit) {
+        if (c->m_quit) {
             break;
         }
-        if (data->client < 0) {
+        // Wait for client
+        if (c->m_client < 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             int socket = os_socket_accept(listen_socket);
             if (socket < 0) {
-                if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED)
-                    fprintf(stderr, "ERROR on socket: %s\n", strerror(errno));
+#ifndef NDEBUG
+                if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {
+                    std::cerr << "Socket error: " << strerror(errno) << std::endl;
+                }
+#endif
                 continue;
             }
             os_socket_block(socket, false);
-            data->mutex.lock();
-            data->client = socket;
-            printf("connected\n");
-            data->mutex.unlock();
+            c->m_mutex.lock();
+            c->m_client = socket;
+            c->m_mutex.unlock();
+#ifndef NDEBUG
+            std::cout << "Client connected" << std::endl;
+#endif
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        data->mutex.lock();
-        ssize_t n = os_socket_recv(data->client, data->buffer + data->buffer_pos, BUFSIZE - data->buffer_pos, 0x4000); // MSG_NOSIGNAL
+        c->m_mutex.lock();
+        ssize_t n = os_socket_recv(c->m_client, c->m_buffer + c->m_bufferPos, c->m_bufferAlloc - c->m_bufferPos, MSG_NOSIGNAL);
         if (n > 0) {
-            data->buffer_pos += n;
+            c->m_bufferPos += n;
         }
-        data->mutex.unlock();
+        c->m_mutex.unlock();
         if (n == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // nothing to read, try again later
                 continue;
             }
-            if (errno != ECONNRESET)
-                fprintf(stderr, "ERROR on connection: %s\n", strerror(errno));
+#ifndef NDEBUG
+            if (errno != ECONNRESET) {
+                std::cerr << "Socket recv error: " << strerror(errno) << std::endl;
+            }
+#endif
         }
-        if (n <= 0) { // recv() returns 0 when the client disconnects
-            data->mutex.lock();
-            os_socket_close(data->client);
-            data->client = -1;
-            data->reset_buf();
-            data->client_disconnected = true;
-            printf("discon\n");
-            data->mutex.unlock();
+        if (n <= 0) {
+            c->m_mutex.lock();
+            os_socket_close(c->m_client);
+            c->m_client = -1;
+            c->m_bufferPos = 0;
+            c->m_msgSize = 0;
+            c->m_msgSizePos = 0;
+            free(c->m_msg);
+            c->m_msg = nullptr;
+            c->m_msgPos = 0;
+#ifndef NDEBUG
+            std::cout << "Client disconnected" << std::endl;
+#endif
+            c->m_mutex.unlock();
         }
     }
 
+    delete[] c->m_buffer;
     os_socket_close(listen_socket);
-}
-
-void control_process_socket(struct control_thread &data, struct overlay_data *ov_data)
-{
-    data.mutex.lock();
-    if (data.ov_data != ov_data) {
-        if (data.ov_data) {
-            os_socket_close(data.client);
-            data.client = -1;
-            data.client_disconnected = false;
-            data.reset_buf();
-            printf("force discon\n");
-        }
-        data.ov_data = ov_data;
-    }
-    if (data.client_disconnected) {
-        data.client_disconnected = false;
-        destroy_images(ov_data);
-    }
-    const size_t inc = 7123;
-    for (size_t i = 0; i < data.buffer_pos; i += inc) {
-        process_buf(data, data.client, &data.buffer[i], std::min(inc, data.buffer_pos - i));
-    }
-    data.buffer_pos = 0;
-    data.mutex.unlock();
-}
-
-void control_start(struct control_thread &data)
-{
-    if (data.thread.joinable()) {
-        data.thread.join();
-    }
-    data.thread = std::thread(control_thread_run, &data);
-}
-
-void control_terminate(struct control_thread &data)
-{
-    data.thread_quit = true;
-    if (data.thread.joinable()) {
-        data.thread.join();
-    }
 }

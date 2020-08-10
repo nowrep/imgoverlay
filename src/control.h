@@ -2,35 +2,50 @@
 
 #include <thread>
 #include <mutex>
+#include <unordered_map>
 
-struct control_thread {
-    std::thread thread;
-    std::mutex mutex;
-    std::string socket_path;
-    int client = -1;
-    bool thread_quit = false;
-    uint8_t *buffer = nullptr;
-    size_t buffer_pos = 0;
-    bool client_disconnected = false;
-
-    uint32_t msg_size = 0;
-    uint8_t msg_size_pos = 0;
-    uint8_t *current_msg = nullptr;
-    size_t current_msg_pos = 0;
-
-    struct overlay_data *ov_data = nullptr;
-
-    void reset_buf() {
-        buffer_pos = 0;
-        msg_size = 0;
-        msg_size_pos = 0;
-        free(current_msg);
-        current_msg = nullptr;
-        current_msg_pos = 0;
-    }
+struct OverlayImage
+{
+    int x;
+    int y;
+    int width;
+    int height;
+    uint8_t *pixels = nullptr;
+    void *to_free = nullptr;
 };
 
-void control_process_socket(struct control_thread &data, struct overlay_data *ov_data);
+class Control
+{
+public:
+    explicit Control(const std::string &socketPath);
+    ~Control();
 
-void control_start(struct control_thread &data);
-void control_terminate(struct control_thread &data);
+    const std::unordered_map<uint8_t, OverlayImage> &images() const;
+
+    void processSocket();
+
+private:
+    uint32_t processMsg(struct msg_struct *msg);
+    uint32_t processCreateImageMsg(struct msg_struct *msg);
+    uint32_t processUpdateImageMsg(struct msg_struct *msg);
+    uint32_t processDestroyImageMsg(struct msg_struct *msg);
+
+    static void run(Control *c);
+
+    std::string m_socketPath;
+    std::unordered_map<uint8_t, OverlayImage> m_images;
+
+    std::thread m_thread;
+    std::mutex m_mutex;
+    bool m_quit = false;
+    int m_client = -1;
+
+    uint8_t *m_buffer = nullptr;
+    size_t m_bufferPos = 0;
+    size_t m_bufferAlloc = 5 * 1024 * 1024;
+
+    uint32_t m_msgSize = 0;
+    uint8_t m_msgSizePos = 0;
+    uint8_t *m_msg = nullptr;
+    size_t m_msgPos = 0;
+};

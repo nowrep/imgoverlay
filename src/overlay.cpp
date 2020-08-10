@@ -62,8 +62,7 @@ struct instance_data {
    struct vk_instance_dispatch_table vtable;
    VkInstance instance;
    struct overlay_params params;
-   control_thread control;
-
+   Control *control = nullptr;
 };
 
 /* Mapped from VkDevice */
@@ -149,13 +148,12 @@ struct swapchain_data {
        VkBuffer upload_buffer = 0;
        VkDeviceMemory upload_buffer_mem = 0;
        VkDescriptorSet desc = 0;
+       uint8_t *uploaded_pixels = nullptr;
    };
    std::unordered_map<uint8_t, image_data> images_data;
 
    /**/
    ImGuiContext* imgui_context;
-
-   struct overlay_data ov_data;
 };
 
 // single global lock, for simplicity
@@ -433,7 +431,7 @@ struct overlay_draw *get_overlay_draw(struct swapchain_data *data)
    return draw;
 }
 
-void check_keybinds(struct overlay_data& data, struct overlay_params& params){
+void check_keybinds(struct overlay_params& params){
    using namespace std::chrono_literals;
    bool pressed = false; // FIXME just a placeholder until wayland support
    auto now = Clock::now(); /* us */
@@ -454,22 +452,24 @@ void check_keybinds(struct overlay_data& data, struct overlay_params& params){
    }
 }
 
-void render_imgui(struct overlay_data& data, struct overlay_params& params, bool is_vulkan)
+void render_imgui(struct swapchain_data *data)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0,0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0,0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
-    for (auto it = data.images.cbegin(); it != data.images.cend(); ++it) {
-        const overlay_data::image &img = it->second;
-        if (!img.texture) {
-            continue;
-        }
+    const std::unordered_map<uint8_t, OverlayImage> &images = data->device->instance->control->images();
+
+    for (auto it : images) {
+        const uint8_t id = it.first;
+        const OverlayImage &img = it.second;
+        const swapchain_data::image_data &img_data = data->images_data[id];
+
         ImGui::SetNextWindowBgAlpha(0.0);
         ImGui::SetNextWindowPos(ImVec2(img.x, img.y), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(img.width + 10, img.height + 10), ImGuiCond_Always);
         ImGui::Begin("Img", &open, ImGuiWindowFlags_NoDecoration);
-        ImGui::Image(img.texture, ImVec2(img.width, img.height));
+        ImGui::Image(img_data.desc, ImVec2(img.width, img.height));
         ImGui::End();
     }
 
@@ -480,14 +480,11 @@ static void create_swapchain_images(struct swapchain_data *data);
 
 static void compute_swapchain_display(struct swapchain_data *data)
 {
-   struct device_data *device_data = data->device;
-   struct instance_data *instance_data = device_data->instance;
-
    ImGui::SetCurrentContext(data->imgui_context);
    ImGui::NewFrame();
    {
       create_swapchain_images(data);
-      render_imgui(data->ov_data, instance_data->params, true);
+      render_imgui(data);
    }
 
    ImGui::EndFrame();
@@ -712,49 +709,59 @@ static void ensure_swapchain_fonts(struct swapchain_data *data,
 
 static void create_swapchain_images(struct swapchain_data *data)
 {
-   struct device_data *device_data = data->device;
-   struct overlay_data *overlay_data = &data->ov_data;
+    struct device_data *device_data = data->device;
+    const std::unordered_map<uint8_t, OverlayImage> &images = device_data->instance->control->images();
 
-   for (auto it = overlay_data->images_changes.cbegin(); it != overlay_data->images_changes.cend(); ++it) {
-       const uint8_t id = it->first;
-       const overlay_data::changes change = it->second;
-       if (change == overlay_data::image_created) {
-           overlay_data::image &img = overlay_data->images[id];
-           swapchain_data::image_data img_data;
-           img_data.desc = create_image_with_desc(data, img.width, img.height, VK_FORMAT_R8G8B8A8_UNORM, img_data.image, img_data.mem, img_data.image_view);
-           img.texture = (ImTextureID) img_data.desc;
-           data->images_data[id] = img_data;
-       }
-       if (change == overlay_data::image_destroyed) {
-           const swapchain_data::image_data &img_data = data->images_data[id];
-           device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &img_data.desc);
-           device_data->vtable.DestroyImageView(device_data->device, img_data.image_view, NULL);
-           device_data->vtable.DestroyImage(device_data->device, img_data.image, NULL);
-           device_data->vtable.FreeMemory(device_data->device, img_data.mem, NULL);
-           device_data->vtable.DestroyBuffer(device_data->device, img_data.upload_buffer, NULL);
-           device_data->vtable.FreeMemory(device_data->device, img_data.upload_buffer_mem, NULL);
-           data->images_data.erase(id);
-       }
-   }
+    // Created
+    for (auto it : images) {
+        const uint8_t id = it.first;
+        if (data->images_data.find(id) != data->images_data.end()) {
+            continue;
+        }
+        const OverlayImage &img = it.second;
+        swapchain_data::image_data img_data;
+        img_data.desc = create_image_with_desc(data, img.width, img.height, VK_FORMAT_R8G8B8A8_UNORM, img_data.image, img_data.mem, img_data.image_view);
+        data->images_data.insert({id, img_data});
+    }
+
+    // Destroyed
+    std::vector<uint8_t> to_erase;
+    for (auto it : data->images_data) {
+        const uint8_t id = it.first;
+        if (images.find(id) != images.end()) {
+            continue;
+        }
+        const swapchain_data::image_data &img_data = it.second;
+        device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &img_data.desc);
+        device_data->vtable.DestroyImageView(device_data->device, img_data.image_view, NULL);
+        device_data->vtable.DestroyImage(device_data->device, img_data.image, NULL);
+        device_data->vtable.FreeMemory(device_data->device, img_data.mem, NULL);
+        device_data->vtable.DestroyBuffer(device_data->device, img_data.upload_buffer, NULL);
+        device_data->vtable.FreeMemory(device_data->device, img_data.upload_buffer_mem, NULL);
+        to_erase.push_back(id);
+    }
+    for (uint8_t id : to_erase) {
+        data->images_data.erase(id);
+    }
 }
 
 static void ensure_swapchain_images(struct swapchain_data *data,
                                    VkCommandBuffer command_buffer)
 {
-   struct device_data *device_data = data->device;
-   struct overlay_data *overlay_data = &data->ov_data;
+    struct device_data *device_data = data->device;
+    const std::unordered_map<uint8_t, OverlayImage> &images = device_data->instance->control->images();
 
-   for (auto it = overlay_data->images_changes.cbegin(); it != overlay_data->images_changes.cend(); ++it) {
-       const uint8_t id = it->first;
-       const overlay_data::changes change = it->second;
-       if (change == overlay_data::image_updated) {
-           overlay_data::image &img = overlay_data->images[id];
-           swapchain_data::image_data &img_data = data->images_data[id];
-           VkDeviceSize upload_size = img.width * img.height * 4;
-           upload_image_data(device_data, command_buffer, img.pixels, upload_size, img.width, img.height, img_data.upload_buffer, img_data.upload_buffer_mem, img_data.image);
-       }
-   }
-   overlay_data->images_changes.clear();
+    for (auto it : images) {
+        const uint8_t id = it.first;
+        const OverlayImage &img = it.second;
+        swapchain_data::image_data &img_data = data->images_data[id];
+        if (img.pixels == img_data.uploaded_pixels) {
+            continue;
+        }
+        img_data.uploaded_pixels = img.pixels;
+        VkDeviceSize upload_size = img.width * img.height * 4;
+        upload_image_data(device_data, command_buffer, img.pixels, upload_size, img.width, img.height, img_data.upload_buffer, img_data.upload_buffer_mem, img_data.image);
+    }
 }
 
 static void CreateOrResizeBuffer(struct device_data *data,
@@ -1421,10 +1428,9 @@ static struct overlay_draw *before_present(struct swapchain_data *swapchain_data
                                            unsigned imageIndex)
 {
    struct overlay_draw *draw = NULL;
-   struct overlay_data *ov_data = &swapchain_data->ov_data;
 
-   control_process_socket(swapchain_data->device->instance->control, ov_data);
-   check_keybinds(swapchain_data->ov_data, swapchain_data->device->instance->params);
+   swapchain_data->device->instance->control->processSocket();
+   check_keybinds(swapchain_data->device->instance->params);
 
    compute_swapchain_display(swapchain_data);
    draw = render_swapchain_display(swapchain_data, present_queue,
@@ -1597,8 +1603,7 @@ static VkResult overlay_CreateInstance(
 
    if (!is_blacklisted()) {
       parse_overlay_config(&instance_data->params, getenv("MANGOHUD_CONFIG"));
-      instance_data->control.socket_path = instance_data->params.control;
-      control_start(instance_data->control);
+      instance_data->control = new Control(instance_data->params.control);
    }
 
    return result;
@@ -1612,7 +1617,8 @@ static void overlay_DestroyInstance(
    instance_data_map_physical_devices(instance_data, false);
    instance_data->vtable.DestroyInstance(instance, pAllocator);
    if (!is_blacklisted()) {
-       control_terminate(instance_data->control);
+       delete instance_data->control;
+       instance_data->control = nullptr;
    }
    destroy_instance_data(instance_data);
 }
