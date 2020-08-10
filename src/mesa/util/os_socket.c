@@ -27,7 +27,7 @@ os_socket_listen_abstract(const char *path, int count)
    struct sockaddr_un addr;
    memset(&addr, 0, sizeof(addr));
    addr.sun_family = AF_UNIX;
-   strncpy(addr.sun_path + 1, path, sizeof(addr.sun_path) - 2);
+   strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
 
    /* Create an abstract socket */
    int ret = bind(s, (struct sockaddr*)&addr,

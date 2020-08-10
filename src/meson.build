@@ -25,6 +25,7 @@ vklayer_files = files(
   'blacklist.cpp',
   'file_utils.cpp',
   'config.cpp',
+  'control.cpp',
 )
 
 #opengl_files = files(

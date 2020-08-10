@@ -37,7 +37,7 @@ enum overlay_param_enabled {
 struct overlay_params {
    bool enabled[OVERLAY_PARAM_ENABLED_MAX];
    bool no_display;
-   int control;
+   std::string control;
    std::vector<KeySym> toggle_hud;
    float font_size, font_scale;
    std::unordered_map<std::string,std::string> options;

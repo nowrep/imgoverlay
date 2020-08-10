@@ -23,21 +23,6 @@
 #include "loaders/loader_x11.h"
 #endif
 
-static int
-parse_control(const char *str)
-{
-   int ret = os_socket_listen_abstract(str, 1);
-   if (ret < 0) {
-      fprintf(stderr, "ERROR: Couldn't create socket pipe at '%s'\n", str);
-      fprintf(stderr, "ERROR: '%s'\n", strerror(errno));
-      return ret;
-   }
-
-   os_socket_block(ret, false);
-
-   return ret;
-}
-
 static float
 parse_float(const char *str)
 {
@@ -46,6 +31,12 @@ parse_float(const char *str)
    ss.imbue(std::locale::classic());
    ss >> val;
    return val;
+}
+
+static std::string
+parse_string(const char *str)
+{
+    return str;
 }
 
 #ifdef HAVE_X11
@@ -79,6 +70,7 @@ parse_toggle_hud(const char *str)
 #define parse_toggle_hud(x)      {}
 #endif
 
+#define parse_control(s) parse_string(s)
 #define parse_font_scale(s) parse_float(s)
 #define parse_font_size(s) parse_float(s)
 
@@ -182,7 +174,7 @@ parse_overlay_config(struct overlay_params *params,
 
    *params = {};
 
-   params->control = -1;
+   params->control = "/tmp/imgoverlay.socket";
    params->font_scale = 1.0f;
 
 #ifdef HAVE_X11

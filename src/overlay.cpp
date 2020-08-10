@@ -53,6 +53,7 @@
 #include "keybinds.h"
 #include "blacklist.h"
 #include "version.h"
+#include "control.h"
 
 bool open = false;
 
@@ -61,6 +62,8 @@ struct instance_data {
    struct vk_instance_dispatch_table vtable;
    VkInstance instance;
    struct overlay_params params;
+   control_thread control;
+
 };
 
 /* Mapped from VkDevice */
@@ -122,7 +125,6 @@ struct swapchain_data {
 
    VkDescriptorPool descriptor_pool;
    VkDescriptorSetLayout descriptor_layout;
-   VkDescriptorSet descriptor_set;
 
    VkSampler font_sampler;
 
@@ -139,6 +141,16 @@ struct swapchain_data {
    VkDeviceMemory font_mem;
    VkBuffer upload_font_buffer;
    VkDeviceMemory upload_font_buffer_mem;
+
+   struct image_data {
+       VkImage image = 0;
+       VkImageView image_view = 0;
+       VkDeviceMemory mem = 0;
+       VkBuffer upload_buffer = 0;
+       VkDeviceMemory upload_buffer_mem = 0;
+       VkDescriptorSet desc = 0;
+   };
+   std::unordered_map<uint8_t, image_data> images_data;
 
    /**/
    ImGuiContext* imgui_context;
@@ -250,8 +262,6 @@ static struct instance_data *new_instance_data(VkInstance instance)
 
 static void destroy_instance_data(struct instance_data *data)
 {
-   if (data->params.control >= 0)
-      os_socket_close(data->params.control);
    unmap_object(HKEY(data->instance));
    delete data;
 }
@@ -444,26 +454,29 @@ void check_keybinds(struct overlay_data& data, struct overlay_params& params){
    }
 }
 
-void position_layer(struct overlay_data& data, struct overlay_params& params)
-{
-   float margin = 10.0f;
-
-   ImVec2 window_size(200, 200);
-   ImGui::SetNextWindowBgAlpha(0.80);
-   ImGui::SetNextWindowSize(window_size, ImGuiCond_Always);
-   ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-   ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8,-3));
-   ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0);
-   ImVec2 main_window_pos;
-   main_window_pos = ImVec2(margin, margin);
-   ImGui::SetNextWindowPos(main_window_pos, ImGuiCond_Always);
-}
-
 void render_imgui(struct overlay_data& data, struct overlay_params& params, bool is_vulkan)
 {
-    ImGui::Begin("Main", &open, ImGuiWindowFlags_NoDecoration);
-    ImGui::End();
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0,0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0,0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+    for (auto it = data.images.cbegin(); it != data.images.cend(); ++it) {
+        const overlay_data::image &img = it->second;
+        if (!img.texture) {
+            continue;
+        }
+        ImGui::SetNextWindowBgAlpha(0.0);
+        ImGui::SetNextWindowPos(ImVec2(img.x, img.y), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(img.width + 10, img.height + 10), ImGuiCond_Always);
+        ImGui::Begin("Img", &open, ImGuiWindowFlags_NoDecoration);
+        ImGui::Image(img.texture, ImVec2(img.width, img.height));
+        ImGui::End();
+    }
+
+    ImGui::PopStyleVar(3);
 }
+
+static void create_swapchain_images(struct swapchain_data *data);
 
 static void compute_swapchain_display(struct swapchain_data *data)
 {
@@ -473,10 +486,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::SetCurrentContext(data->imgui_context);
    ImGui::NewFrame();
    {
-      position_layer(data->ov_data, instance_data->params);
+      create_swapchain_images(data);
       render_imgui(data->ov_data, instance_data->params, true);
    }
-   ImGui::PopStyleVar(3);
 
    ImGui::EndFrame();
    ImGui::Render();
@@ -522,30 +534,32 @@ static void upload_image_data(struct device_data *device_data,
                               VkImage image)
 {
    /* Upload buffer */
-   VkBufferCreateInfo buffer_info = {};
-   buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-   buffer_info.size = upload_size;
-   buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-   buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-   VK_CHECK(device_data->vtable.CreateBuffer(device_data->device, &buffer_info,
-                                             NULL, &upload_buffer));
-   VkMemoryRequirements upload_buffer_req;
-   device_data->vtable.GetBufferMemoryRequirements(device_data->device,
-                                                   upload_buffer,
-                                                   &upload_buffer_req);
-   VkMemoryAllocateInfo upload_alloc_info = {};
-   upload_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-   upload_alloc_info.allocationSize = upload_buffer_req.size;
-   upload_alloc_info.memoryTypeIndex = vk_memory_type(device_data,
-                                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                                                      upload_buffer_req.memoryTypeBits);
-   VK_CHECK(device_data->vtable.AllocateMemory(device_data->device,
-                                               &upload_alloc_info,
-                                               NULL,
-                                               &upload_buffer_mem));
-   VK_CHECK(device_data->vtable.BindBufferMemory(device_data->device,
-                                                 upload_buffer,
-                                                 upload_buffer_mem, 0));
+   if (!upload_buffer) {
+       VkBufferCreateInfo buffer_info = {};
+       buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+       buffer_info.size = upload_size;
+       buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+       buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+       VK_CHECK(device_data->vtable.CreateBuffer(device_data->device, &buffer_info,
+                                                 NULL, &upload_buffer));
+       VkMemoryRequirements upload_buffer_req;
+       device_data->vtable.GetBufferMemoryRequirements(device_data->device,
+                                                       upload_buffer,
+                                                       &upload_buffer_req);
+       VkMemoryAllocateInfo upload_alloc_info = {};
+       upload_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+       upload_alloc_info.allocationSize = upload_buffer_req.size;
+       upload_alloc_info.memoryTypeIndex = vk_memory_type(device_data,
+                                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                                                          upload_buffer_req.memoryTypeBits);
+       VK_CHECK(device_data->vtable.AllocateMemory(device_data->device,
+                                                   &upload_alloc_info,
+                                                   NULL,
+                                                   &upload_buffer_mem));
+       VK_CHECK(device_data->vtable.BindBufferMemory(device_data->device,
+                                                     upload_buffer,
+                                                     upload_buffer_mem, 0));
+   }
 
    /* Upload to Buffer */
    char* map = NULL;
@@ -696,6 +710,53 @@ static void ensure_swapchain_fonts(struct swapchain_data *data,
    upload_image_data(device_data, command_buffer, pixels, upload_size, width, height, data->upload_font_buffer, data->upload_font_buffer_mem, data->font_image);
 }
 
+static void create_swapchain_images(struct swapchain_data *data)
+{
+   struct device_data *device_data = data->device;
+   struct overlay_data *overlay_data = &data->ov_data;
+
+   for (auto it = overlay_data->images_changes.cbegin(); it != overlay_data->images_changes.cend(); ++it) {
+       const uint8_t id = it->first;
+       const overlay_data::changes change = it->second;
+       if (change == overlay_data::image_created) {
+           overlay_data::image &img = overlay_data->images[id];
+           swapchain_data::image_data img_data;
+           img_data.desc = create_image_with_desc(data, img.width, img.height, VK_FORMAT_R8G8B8A8_UNORM, img_data.image, img_data.mem, img_data.image_view);
+           img.texture = (ImTextureID) img_data.desc;
+           data->images_data[id] = img_data;
+       }
+       if (change == overlay_data::image_destroyed) {
+           const swapchain_data::image_data &img_data = data->images_data[id];
+           device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &img_data.desc);
+           device_data->vtable.DestroyImageView(device_data->device, img_data.image_view, NULL);
+           device_data->vtable.DestroyImage(device_data->device, img_data.image, NULL);
+           device_data->vtable.FreeMemory(device_data->device, img_data.mem, NULL);
+           device_data->vtable.DestroyBuffer(device_data->device, img_data.upload_buffer, NULL);
+           device_data->vtable.FreeMemory(device_data->device, img_data.upload_buffer_mem, NULL);
+           data->images_data.erase(id);
+       }
+   }
+}
+
+static void ensure_swapchain_images(struct swapchain_data *data,
+                                   VkCommandBuffer command_buffer)
+{
+   struct device_data *device_data = data->device;
+   struct overlay_data *overlay_data = &data->ov_data;
+
+   for (auto it = overlay_data->images_changes.cbegin(); it != overlay_data->images_changes.cend(); ++it) {
+       const uint8_t id = it->first;
+       const overlay_data::changes change = it->second;
+       if (change == overlay_data::image_updated) {
+           overlay_data::image &img = overlay_data->images[id];
+           swapchain_data::image_data &img_data = data->images_data[id];
+           VkDeviceSize upload_size = img.width * img.height * 4;
+           upload_image_data(device_data, command_buffer, img.pixels, upload_size, img.width, img.height, img_data.upload_buffer, img_data.upload_buffer_mem, img_data.image);
+       }
+   }
+   overlay_data->images_changes.clear();
+}
+
 static void CreateOrResizeBuffer(struct device_data *data,
                                  VkBuffer *buffer,
                                  VkDeviceMemory *buffer_memory,
@@ -755,6 +816,7 @@ static struct overlay_draw *render_swapchain_display(struct swapchain_data *data
    device_data->vtable.BeginCommandBuffer(draw->command_buffer, &buffer_begin_info);
 
    ensure_swapchain_fonts(data, draw->command_buffer);
+   ensure_swapchain_images(data, draw->command_buffer);
 
    /* Bounce the image to display back to color attachment layout for
     * rendering on top of it.
@@ -1022,12 +1084,13 @@ static void setup_swapchain_data_pipeline(struct swapchain_data *data)
    /* Descriptor pool */
    VkDescriptorPoolSize sampler_pool_size = {};
    sampler_pool_size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-   sampler_pool_size.descriptorCount = 1;
+   sampler_pool_size.descriptorCount = 16;
    VkDescriptorPoolCreateInfo desc_pool_info = {};
    desc_pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-   desc_pool_info.maxSets = 1;
-   desc_pool_info.poolSizeCount = 16;
+   desc_pool_info.maxSets = 16;
+   desc_pool_info.poolSizeCount = 1;
    desc_pool_info.pPoolSizes = &sampler_pool_size;
+   desc_pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
    VK_CHECK(device_data->vtable.CreateDescriptorPool(device_data->device,
                                                      &desc_pool_info,
                                                      NULL, &data->descriptor_pool));
@@ -1249,7 +1312,6 @@ static void setup_swapchain_data(struct swapchain_data *data,
                                                       &n_images,
                                                       data->images.data()));
 
-
    if (n_images != data->images.size()) {
       data->images.resize(n_images);
       data->image_views.resize(n_images);
@@ -1319,6 +1381,17 @@ static void shutdown_swapchain_data(struct swapchain_data *data)
       device_data->vtable.DestroyFramebuffer(device_data->device, data->framebuffers[i], NULL);
    }
 
+   for (auto it = data->images_data.cbegin(); it != data->images_data.cend(); ++it) {
+       const swapchain_data::image_data &img_data = it->second;
+       device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &img_data.desc);
+       device_data->vtable.DestroyImageView(device_data->device, img_data.image_view, NULL);
+       device_data->vtable.DestroyImage(device_data->device, img_data.image, NULL);
+       device_data->vtable.FreeMemory(device_data->device, img_data.mem, NULL);
+       device_data->vtable.DestroyBuffer(device_data->device, img_data.upload_buffer, NULL);
+       device_data->vtable.FreeMemory(device_data->device, img_data.upload_buffer_mem, NULL);
+   }
+   data->images_data.clear();
+
    device_data->vtable.DestroyRenderPass(device_data->device, data->render_pass, NULL);
 
    device_data->vtable.DestroyCommandPool(device_data->device, data->command_pool, NULL);
@@ -1335,7 +1408,6 @@ static void shutdown_swapchain_data(struct swapchain_data *data)
    device_data->vtable.DestroyImageView(device_data->device, data->font_image_view, NULL);
    device_data->vtable.DestroyImage(device_data->device, data->font_image, NULL);
    device_data->vtable.FreeMemory(device_data->device, data->font_mem, NULL);
-
    device_data->vtable.DestroyBuffer(device_data->device, data->upload_font_buffer, NULL);
    device_data->vtable.FreeMemory(device_data->device, data->upload_font_buffer_mem, NULL);
 
@@ -1349,7 +1421,9 @@ static struct overlay_draw *before_present(struct swapchain_data *swapchain_data
                                            unsigned imageIndex)
 {
    struct overlay_draw *draw = NULL;
+   struct overlay_data *ov_data = &swapchain_data->ov_data;
 
+   control_process_socket(swapchain_data->device->instance->control, ov_data);
    check_keybinds(swapchain_data->ov_data, swapchain_data->device->instance->params);
 
    compute_swapchain_display(swapchain_data);
@@ -1523,6 +1597,8 @@ static VkResult overlay_CreateInstance(
 
    if (!is_blacklisted()) {
       parse_overlay_config(&instance_data->params, getenv("MANGOHUD_CONFIG"));
+      instance_data->control.socket_path = instance_data->params.control;
+      control_start(instance_data->control);
    }
 
    return result;
@@ -1535,6 +1611,9 @@ static void overlay_DestroyInstance(
    struct instance_data *instance_data = FIND(struct instance_data, instance);
    instance_data_map_physical_devices(instance_data, false);
    instance_data->vtable.DestroyInstance(instance, pAllocator);
+   if (!is_blacklisted()) {
+       control_terminate(instance_data->control);
+   }
    destroy_instance_data(instance_data);
 }
 
