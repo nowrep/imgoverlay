@@ -72,6 +72,7 @@ struct msg_struct {
 
 struct reply_struct {
     uint32_t status;
+    uint32_t msgtype;
     uint8_t id;
     uint8_t buffer;
 };
@@ -244,6 +245,8 @@ void Control::processSocket()
 
 void Control::processMsg(struct msg_struct *msg, struct reply_struct *reply)
 {
+    reply->msgtype = msg->type;
+
     switch (msg->type) {
     case MSG_CREATE_IMAGE:
         return processCreateImageMsg(msg, reply);
