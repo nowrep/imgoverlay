@@ -29,7 +29,8 @@ enum msg_type {
     MSG_DESTROY_ALL_IMAGES     = 5,
 };
 
-#define MSG_BUF_SIZE 64
+#define MSG_BUF_SIZE 32
+#define REPLY_BUF_SIZE 16
 #define PIXELS_SIZE(w, h) ((w) * (h) * sizeof(uint32_t))
 #define MAX_MEM_SIZE 20 * 1024 * 1024
 
@@ -67,6 +68,12 @@ struct msg_struct {
         msg_update_image_contents update_image_contents;
         msg_destroy_image destroy_image;
     };
+};
+
+struct reply_struct {
+    uint32_t status;
+    uint8_t id;
+    uint8_t buffer;
 };
 
 Control::Control(const std::string &socketPath)
@@ -205,8 +212,15 @@ void Control::processSocket()
         char buf[MSG_BUF_SIZE];
         ssize_t n = os_socket_recv(m_client, buf, MSG_BUF_SIZE, MSG_NOSIGNAL);
         if (n == MSG_BUF_SIZE) {
-            uint32_t ret = processMsg(reinterpret_cast<struct msg_struct*>(buf));
-            os_socket_send(m_client, &ret, sizeof(uint32_t), MSG_NOSIGNAL);
+            char rbuf[REPLY_BUF_SIZE];
+            memset(rbuf, 0, REPLY_BUF_SIZE);
+            struct reply_struct *reply = reinterpret_cast<struct reply_struct*>(rbuf);
+            processMsg(reinterpret_cast<struct msg_struct*>(buf), reply);
+            os_socket_send(m_client, reply, REPLY_BUF_SIZE, MSG_NOSIGNAL);
+            if (reply->status == STATUS_ERROR) {
+                closeClient();
+                return;
+            }
         }
         if (n == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -228,38 +242,49 @@ void Control::processSocket()
     }
 }
 
-uint32_t Control::processMsg(struct msg_struct *msg)
+void Control::processMsg(struct msg_struct *msg, struct reply_struct *reply)
 {
     switch (msg->type) {
     case MSG_CREATE_IMAGE:
-        return processCreateImageMsg(msg);
+        return processCreateImageMsg(msg, reply);
     case MSG_UPDATE_IMAGE:
-        return processUpdateImageMsg(msg);
+        return processUpdateImageMsg(msg, reply);
     case MSG_UPDATE_IMAGE_CONTENTS:
-        return processUpdateImageContentsMsg(msg);
+        return processUpdateImageContentsMsg(msg, reply);
     case MSG_DESTROY_IMAGE:
-        return processDestroyImageMsg(msg);
+        return processDestroyImageMsg(msg, reply);
     case MSG_DESTROY_ALL_IMAGES:
-        return processDestroyAllImagesMsg(msg);
+        return processDestroyAllImagesMsg(msg, reply);
     default:
         std::cerr << "Invalid msg type " << msg->type << std::endl;
-        return STATUS_ERROR;
+        reply->status = STATUS_ERROR;
+        break;
     }
 }
 
-uint32_t Control::processCreateImageMsg(struct msg_struct *msg)
+void Control::processCreateImageMsg(struct msg_struct *msg, struct reply_struct *reply)
 {
     struct msg_create_image *m = &msg->create_image;
 
-    if (m->memsize != (PIXELS_SIZE(m->width, m->height) * 2)) {
+    reply->id = m->id;
+
+    if (m->width == 0 || m->height == 0) {
+        std::cerr << "Invalid size: " << m->width << "x" << m->height << std::endl;
+        reply->status = STATUS_ERROR;
+        return;
+    }
+
+    if (m->memsize > MAX_MEM_SIZE || m->memsize != (PIXELS_SIZE(m->width, m->height) * 2)) {
         std::cerr << "Invalid memsize: " << m->memsize << std::endl;
-        return STATUS_ERROR;
+        reply->status = STATUS_ERROR;
+        return;
     }
 
     auto it = m_images.find(m->id);
     if (it != m_images.end()) {
         std::cerr << "Already have image with id " << m->id << std::endl;
-        return STATUS_ERROR;
+        reply->status = STATUS_ERROR;
+        return;
     }
 
 #ifndef NDEBUG
@@ -278,17 +303,20 @@ uint32_t Control::processCreateImageMsg(struct msg_struct *msg)
     m_waitingId = m->id;
     m_waitingForFd = true;
 
-    return STATUS_OK;
+    reply->status = STATUS_OK;
 }
 
-uint32_t Control::processUpdateImageMsg(struct msg_struct *msg)
+void Control::processUpdateImageMsg(struct msg_struct *msg, struct reply_struct *reply)
 {
     struct msg_update_image *m = &msg->update_image;
+
+    reply->id = m->id;
 
     auto it = m_images.find(m->id);
     if (it == m_images.end()) {
         std::cerr << "Unknown id " << m->id << std::endl;
-        return STATUS_ERROR;
+        reply->status = STATUS_ERROR;
+        return;
     }
 
 #ifndef NDEBUG
@@ -299,37 +327,45 @@ uint32_t Control::processUpdateImageMsg(struct msg_struct *msg)
     it->second.y = m->y;
     it->second.visible = m->visible;
 
-    return STATUS_OK;
+    reply->status = STATUS_OK;
 }
 
-uint32_t Control::processUpdateImageContentsMsg(struct msg_struct *msg)
+void Control::processUpdateImageContentsMsg(struct msg_struct *msg, struct reply_struct *reply)
 {
     struct msg_update_image_contents *m = &msg->update_image_contents;
+
+    reply->id = m->id;
 
     auto it = m_images.find(m->id);
     if (it == m_images.end()) {
         std::cerr << "Unknown id " << m->id << std::endl;
-        return STATUS_ERROR;
+        reply->status = STATUS_ERROR;
+        return;
     }
 
     if (m->buffer < 0 || m->buffer > 1) {
         std::cerr << "Invalid buffer id " << m->buffer << std::endl;
-        return STATUS_ERROR;
+        reply->status = STATUS_ERROR;
+        return;
     }
 
     it->second.pixels = static_cast<uint8_t*>(it->second.memory) + (PIXELS_SIZE(it->second.width, it->second.height) * m->buffer);
 
-    return STATUS_OK;
+    reply->status = STATUS_OK;
+    reply->buffer = m->buffer;
 }
 
-uint32_t Control::processDestroyImageMsg(struct msg_struct *msg)
+void Control::processDestroyImageMsg(struct msg_struct *msg, struct reply_struct *reply)
 {
     struct msg_destroy_image *m = &msg->destroy_image;
+
+    reply->id = m->id;
 
     auto it = m_images.find(m->id);
     if (it == m_images.end()) {
         std::cerr << "Unknown id " << m->id << std::endl;
-        return STATUS_ERROR;
+        reply->status = STATUS_ERROR;
+        return;
     }
 
 #ifndef NDEBUG
@@ -339,10 +375,10 @@ uint32_t Control::processDestroyImageMsg(struct msg_struct *msg)
     destroyImage(it->second);
     m_images.erase(it);
 
-    return STATUS_OK;
+    reply->status = STATUS_OK;
 }
 
-uint32_t Control::processDestroyAllImagesMsg(struct msg_struct *msg)
+void Control::processDestroyAllImagesMsg(struct msg_struct *msg, struct reply_struct *reply)
 {
 #ifndef NDEBUG
     std::cout << "::Destroy all images " << std::endl;
@@ -350,7 +386,7 @@ uint32_t Control::processDestroyAllImagesMsg(struct msg_struct *msg)
 
     destroyAllImages();
 
-    return STATUS_OK;
+    reply->status = STATUS_OK;
 }
 
 void Control::closeClient()

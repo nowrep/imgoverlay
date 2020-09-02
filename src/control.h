@@ -28,12 +28,12 @@ public:
     void processSocket();
 
 private:
-    uint32_t processMsg(struct msg_struct *msg);
-    uint32_t processCreateImageMsg(struct msg_struct *msg);
-    uint32_t processUpdateImageMsg(struct msg_struct *msg);
-    uint32_t processUpdateImageContentsMsg(struct msg_struct *msg);
-    uint32_t processDestroyImageMsg(struct msg_struct *msg);
-    uint32_t processDestroyAllImagesMsg(struct msg_struct *msg);
+    void processMsg(struct msg_struct *msg, struct reply_struct *reply);
+    void processCreateImageMsg(struct msg_struct *msg, struct reply_struct *reply);
+    void processUpdateImageMsg(struct msg_struct *msg, struct reply_struct *reply);
+    void processUpdateImageContentsMsg(struct msg_struct *msg, struct reply_struct *reply);
+    void processDestroyImageMsg(struct msg_struct *msg, struct reply_struct *reply);
+    void processDestroyAllImagesMsg(struct msg_struct *msg, struct reply_struct *reply);
 
     void closeClient();
     void destroyImage(const OverlayImage &img);
