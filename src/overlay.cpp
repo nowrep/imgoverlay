@@ -433,8 +433,8 @@ struct overlay_draw *get_overlay_draw(struct swapchain_data *data)
 
 void check_keybinds(struct overlay_params& params){
    using namespace std::chrono_literals;
-   bool pressed = false; // FIXME just a placeholder until wayland support
-   auto now = Clock::now(); /* us */
+   bool pressed = false;
+   auto now = Clock::now();
    auto elapsedF12 = now - last_f12_press;
 
    auto keyPressDelay = 500ms;
@@ -458,13 +458,15 @@ void render_imgui(struct swapchain_data *data)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0,0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
+    const bool no_display = data->device->instance->params.no_display;
     const std::unordered_map<uint8_t, OverlayImage> &images = data->device->instance->control->images();
 
     for (auto it : images) {
         const uint8_t id = it.first;
         const OverlayImage &img = it.second;
-        const swapchain_data::image_data &img_data = data->images_data[id];
-        if (!img.visible) {
+        swapchain_data::image_data &img_data = data->images_data[id];
+        if (!img.visible || no_display) {
+            img_data.uploaded_pixels = nullptr;
             continue;
         }
         ImGui::SetNextWindowBgAlpha(0.0);
