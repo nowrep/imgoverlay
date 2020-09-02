@@ -12,7 +12,9 @@ struct OverlayImage
     int height = 0;
     bool visible = false;
     uint8_t *pixels = nullptr;
-    void *to_free = nullptr;
+    int memfd = -1;
+    void *memory = nullptr;
+    size_t memsize = 0;
 };
 
 class Control
@@ -29,25 +31,19 @@ private:
     uint32_t processMsg(struct msg_struct *msg);
     uint32_t processCreateImageMsg(struct msg_struct *msg);
     uint32_t processUpdateImageMsg(struct msg_struct *msg);
+    uint32_t processUpdateImageContentsMsg(struct msg_struct *msg);
     uint32_t processDestroyImageMsg(struct msg_struct *msg);
     uint32_t processDestroyAllImagesMsg(struct msg_struct *msg);
 
-    static void run(Control *c);
+    void closeClient();
+    void destroyImage(const OverlayImage &img);
+    void destroyAllImages();
 
     std::string m_socketPath;
     std::unordered_map<uint8_t, OverlayImage> m_images;
 
-    std::thread m_thread;
-    std::mutex m_mutex;
-    bool m_quit = false;
     int m_client = -1;
-
-    uint8_t *m_buffer = nullptr;
-    size_t m_bufferPos = 0;
-    size_t m_bufferAlloc = 5 * 1024 * 1024;
-
-    uint32_t m_msgSize = 0;
-    uint8_t m_msgSizePos = 0;
-    uint8_t *m_msg = nullptr;
-    size_t m_msgPos = 0;
+    int m_server = -1;
+    uint8_t m_waitingId = 0;
+    bool m_waitingForFd = false;
 };
