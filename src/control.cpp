@@ -168,12 +168,15 @@ void Control::processSocket()
         m_client = os_socket_accept(m_server);
         if (m_client >= 0) {
 #ifndef NDEBUG
+            std::cout << "Client connected" << std::endl;
+#endif
+            os_socket_block(m_client, false);
+        } else {
+#ifndef NDEBUG
             if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED) {
                 std::cerr << "Socket error: " << strerror(errno) << std::endl;
             }
-        std::cout << "Client connected" << std::endl;
 #endif
-        os_socket_block(m_client, false);
         }
         return;
     }
@@ -211,7 +214,7 @@ void Control::processSocket()
         }
         // Get message
         char buf[MSG_BUF_SIZE];
-        ssize_t n = os_socket_recv(m_client, buf, MSG_BUF_SIZE, MSG_NOSIGNAL);
+        ssize_t n = os_socket_recv(m_client, buf, MSG_BUF_SIZE, 0);
         if (n == MSG_BUF_SIZE) {
             char rbuf[REPLY_BUF_SIZE];
             memset(rbuf, 0, REPLY_BUF_SIZE);
@@ -249,15 +252,20 @@ void Control::processMsg(struct msg_struct *msg, struct reply_struct *reply)
 
     switch (msg->type) {
     case MSG_CREATE_IMAGE:
-        return processCreateImageMsg(msg, reply);
+        processCreateImageMsg(msg, reply);
+        break;
     case MSG_UPDATE_IMAGE:
-        return processUpdateImageMsg(msg, reply);
+        processUpdateImageMsg(msg, reply);
+        break;
     case MSG_UPDATE_IMAGE_CONTENTS:
-        return processUpdateImageContentsMsg(msg, reply);
+        processUpdateImageContentsMsg(msg, reply);
+        break;
     case MSG_DESTROY_IMAGE:
-        return processDestroyImageMsg(msg, reply);
+        processDestroyImageMsg(msg, reply);
+        break;
     case MSG_DESTROY_ALL_IMAGES:
-        return processDestroyAllImagesMsg(msg, reply);
+        processDestroyAllImagesMsg(msg, reply);
+        break;
     default:
         std::cerr << "Invalid msg type " << msg->type << std::endl;
         reply->status = STATUS_ERROR;
@@ -401,13 +409,15 @@ void Control::closeClient()
     destroyAllImages();
 }
 
-void Control::destroyImage(const OverlayImage &img)
+void Control::destroyImage(OverlayImage &img)
 {
     if (img.memory) {
         munmap(img.memory, img.memsize);
+        img.memory = nullptr;
     }
     if (img.memfd >= 0) {
         close(img.memfd);
+        img.memfd = -1;
     }
 }
 

@@ -36,7 +36,7 @@ private:
     void processDestroyAllImagesMsg(struct msg_struct *msg, struct reply_struct *reply);
 
     void closeClient();
-    void destroyImage(const OverlayImage &img);
+    void destroyImage(OverlayImage &img);
     void destroyAllImages();
 
     std::string m_socketPath;
