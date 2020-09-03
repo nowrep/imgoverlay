@@ -471,8 +471,10 @@ void render_imgui(struct swapchain_data *data)
         }
         ImGui::SetNextWindowBgAlpha(0.0);
         ImGui::SetNextWindowPos(ImVec2(img.x, img.y), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(img.width + 10, img.height + 10), ImGuiCond_Always);
-        ImGui::Begin("Img", &open, ImGuiWindowFlags_NoDecoration);
+        ImGui::SetNextWindowSize(ImVec2(img.width, img.height), ImGuiCond_Always);
+        char name[4];
+        snprintf(name, 4, "%u", (unsigned)id);
+        ImGui::Begin(name, &open, ImGuiWindowFlags_NoDecoration);
         ImGui::Image(img_data.desc, ImVec2(img.width, img.height));
         ImGui::End();
     }
