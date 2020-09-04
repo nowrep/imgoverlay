@@ -197,4 +197,7 @@ dearimgui_sp = subproject('dearimgui')
 dearimgui_dep = dearimgui_sp.get_variable('dearimgui_dep')
 
 subdir('src')
-subdir('client')
+
+if get_option('build_client')
+  subdir('client')
+endif

@@ -3,3 +3,4 @@ option('use_system_vulkan', type : 'feature', value : 'disabled', description: '
 option('imgoverlay_prefix', type : 'string', value : '', description: 'Add prefix to cross-compiled library, like "lib32-".')
 option('append_libdir_imgoverlay', type : 'boolean', value : true, description: 'Append "imgoverlay" to libdir path or not.')
 option('with_x11', type : 'feature', value : 'enabled')
+option('build_client', type : 'boolean', value : true, description: 'Build client application')
