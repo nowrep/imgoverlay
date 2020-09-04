@@ -15,12 +15,9 @@
 
 Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     : QObject(parent)
-    , m_confFile(confFile)
+    , m_settings(confFile.isEmpty() ? QDir::homePath() + QLatin1String("/.config/imgoverlayclient.conf") : confFile, QSettings::IniFormat)
 {
-    if (m_confFile.isEmpty()) {
-        m_confFile = QDir::homePath() + QLatin1String("/.config/imgoverlayclient.conf");
-    }
-    m_socketPath = QSettings(m_confFile, QSettings::IniFormat).value(QStringLiteral("Socket"), QStringLiteral("/tmp/imgoverlay.socket")).toString();
+    m_socketPath = m_settings.value(QStringLiteral("Socket"), QStringLiteral("/tmp/imgoverlay.socket")).toString();
 
     m_socket = new QLocalSocket(this);
     connect(m_socket, &QLocalSocket::stateChanged, this, [this](QLocalSocket::LocalSocketState state) {
@@ -51,7 +48,7 @@ Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     });
 
     QWebEngineProfile::defaultProfile()->setHttpCacheType(QWebEngineProfile::MemoryHttpCache);
-    QWebEngineProfile::defaultProfile()->setPersistentStoragePath(QStringLiteral("%1/webdata").arg(QDir::currentPath()));
+    QWebEngineProfile::defaultProfile()->setPersistentStoragePath(m_settings.value(QStringLiteral("Cache"), QStringLiteral("%1/.cache/imgoverlayclient").arg(QDir::homePath())).toString());
     QWebEngineSettings::defaultSettings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
 
     QVBoxLayout *layout = new QVBoxLayout;
@@ -161,10 +158,9 @@ bool Manager::writeMsg(struct msg_struct *msg)
 void Manager::initWebViews()
 {
     uint8_t i = 1;
-    QSettings settings(m_confFile, QSettings::IniFormat);
-    const auto groups = settings.childGroups();
+    const auto groups = m_settings.childGroups();
     for (const QString &group : groups) {
-        GroupConfig conf(m_confFile, group);
+        GroupConfig conf(m_settings.fileName(), group);
         if (conf.url().isEmpty()) {
             qWarning() << "Invalid config" << group;
             continue;

@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QVector>
+#include <QSettings>
 
 #include "../src/control_prot.h"
 
@@ -37,7 +38,7 @@ private:
     void showView(int index);
     void updateStatus();
 
-    QString m_confFile;
+    QSettings m_settings;
     QString m_socketPath;
     QLocalSocket *m_socket;
     QTimer *m_reconnectTimer;

@@ -50,6 +50,7 @@ imgoverlayclient [--tray] [config-file]
 ```ini
 [General]
 Socket=/tmp/imgoverlay.socket
+Cache=/home/user/.cache/imgoverlayclient
 
 [Github_example]
 Url=https://github.com/nowrep/imgoverlay
