@@ -20,6 +20,7 @@ moc_files = qt5.preprocess(moc_headers : client_headers,
 
 executable(
   'imgoverlayclient',
+  imgoverlay_version,
   client_files,
   moc_files,
   dependencies : qt5_dep,

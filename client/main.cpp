@@ -1,4 +1,5 @@
 #include "manager.h"
+#include "version.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
@@ -7,9 +8,11 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("Imgoverlay Client"));
+    app.setApplicationVersion(QStringLiteral(IMGOVERLAY_VERSION));
 
     QCommandLineParser parser;
     parser.addHelpOption();
+    parser.addVersionOption();
     parser.addPositionalArgument(QStringLiteral("config"), QStringLiteral("Config file"));
 
     QCommandLineOption trayOption({QStringLiteral("t"), QStringLiteral("tray")},

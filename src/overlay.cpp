@@ -1607,6 +1607,7 @@ static VkResult overlay_CreateInstance(
    instance_data_map_physical_devices(instance_data, true);
 
    if (!is_blacklisted()) {
+      std::cout << "imgoverlay " << IMGOVERLAY_VERSION << std::endl;
       parse_overlay_config(&instance_data->params, getenv("IMGOVERLAY_CONFIG"));
       instance_data->control = new Control(instance_data->params.control);
    }
