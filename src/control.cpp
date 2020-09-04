@@ -1,81 +1,16 @@
 #include "control.h"
+#include "control_prot.h"
 #include "overlay.h"
 #include "mesa/util/os_socket.h"
 
-#include <unistd.h>
 #include <string.h>
-#include <thread>
-#include <chrono>
 #include <iostream>
-#include <sys/socket.h>
-#include <linux/memfd.h>
-#include <sys/mman.h>
 
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0x4000
 #endif
 
-enum status {
-    STATUS_OK = 0,
-    STATUS_ERROR = 1,
-};
-
-enum msg_type {
-    MSG_INVALID                = 0xFFFFFFFF,
-    MSG_CREATE_IMAGE           = 1,
-    MSG_UPDATE_IMAGE           = 2,
-    MSG_UPDATE_IMAGE_CONTENTS  = 3,
-    MSG_DESTROY_IMAGE          = 4,
-    MSG_DESTROY_ALL_IMAGES     = 5,
-};
-
-#define MSG_BUF_SIZE 32
-#define REPLY_BUF_SIZE 16
-#define PIXELS_SIZE(w, h) ((w) * (h) * sizeof(uint32_t))
 #define MAX_MEM_SIZE 20 * 1024 * 1024
-
-struct msg_create_image {
-    uint8_t id;
-    uint32_t x;
-    uint32_t y;
-    uint32_t width;
-    uint32_t height;
-    uint8_t visible;
-    uint32_t memsize;
-};
-
-struct msg_update_image {
-    uint8_t id;
-    uint32_t x;
-    uint32_t y;
-    uint8_t visible;
-};
-
-struct msg_update_image_contents {
-    uint8_t id;
-    uint8_t buffer; // 0 - front, 1 - back
-};
-
-struct msg_destroy_image {
-    uint8_t id;
-};
-
-struct msg_struct {
-    uint32_t type;
-    union {
-        msg_create_image create_image;
-        msg_update_image update_image;
-        msg_update_image_contents update_image_contents;
-        msg_destroy_image destroy_image;
-    };
-};
-
-struct reply_struct {
-    uint32_t status;
-    uint32_t msgtype;
-    uint8_t id;
-    uint8_t buffer;
-};
 
 Control::Control(const std::string &socketPath)
     : m_socketPath(socketPath)
@@ -292,6 +227,12 @@ void Control::processCreateImageMsg(struct msg_struct *msg, struct reply_struct 
     auto it = m_images.find(m->id);
     if (it != m_images.end()) {
         std::cerr << "Already have image with id " << m->id << std::endl;
+        reply->status = STATUS_ERROR;
+        return;
+    }
+
+    if (m_images.size() >= MAX_OVERLAY_COUNT) {
+        std::cerr << "Overlay count limit reached " << std::endl;
         reply->status = STATUS_ERROR;
         return;
     }

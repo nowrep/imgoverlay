@@ -4,6 +4,8 @@
 #include <mutex>
 #include <unordered_map>
 
+#define MAX_OVERLAY_COUNT 16
+
 struct OverlayImage
 {
     int x = 0;
