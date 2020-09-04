@@ -10,6 +10,7 @@
 #include <QWebEngineSettings>
 #include <QTabBar>
 #include <QVBoxLayout>
+#include <QSystemTrayIcon>
 
 Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     : QObject(parent)
@@ -58,10 +59,24 @@ Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     layout->addWidget(m_tabBar);
     layout->addWidget(m_container);
 
-    QWidget *window = new QWidget;
-    window->resize(600, 400);
-    window->setLayout(layout);
-    window->show();
+    m_window = new QWidget;
+    m_window->resize(600, 400);
+    m_window->setLayout(layout);
+
+    m_window->setAttribute(Qt::WA_DontShowOnScreen, tray);
+    m_window->show();
+
+    m_tray = new QSystemTrayIcon(this);
+    m_tray->setIcon(QIcon::fromTheme(QStringLiteral("image-x-generic")));
+    m_tray->setToolTip(QStringLiteral("Imgoverlay Client"));
+    m_tray->show();
+    connect(m_tray, &QSystemTrayIcon::activated, this, [=](QSystemTrayIcon::ActivationReason reason) {
+        if (reason == QSystemTrayIcon::Trigger) {
+            m_window->setAttribute(Qt::WA_DontShowOnScreen, !m_window->testAttribute(Qt::WA_DontShowOnScreen));
+            m_window->hide();
+            m_window->show();
+        }
+    });
 
     initWebViews();
     m_reconnectTimer->start();

@@ -9,6 +9,7 @@ class QTimer;
 class QTabBar;
 class QWidget;
 class QLocalSocket;
+class QSystemTrayIcon;
 
 class WebView;
 
@@ -42,4 +43,6 @@ private:
 
     QTabBar *m_tabBar;
     QWidget *m_container;
+    QWidget *m_window;
+    QSystemTrayIcon *m_tray;
 };
