@@ -1,0 +1,64 @@
+_pkgbase=imgoverlay
+pkgbase=${_pkgbase}-git
+pkgname=('imgoverlay-git' 'lib32-imgoverlay-git' 'imgoverlay-common-git')
+pkgver=0.1
+pkgrel=1
+url='https://github.com/nowrep/imgoverlay'
+license=('MIT')
+arch=('x86_64')
+depends=('glslang' 'lib32-vulkan-icd-loader' 'vulkan-icd-loader' 'qt5-webengine')
+makedepends=('gcc' 'meson' 'python' 'libx11' 'lib32-libx11' 'git' 'vulkan-headers')
+source=("$_pkgbase::git+$url")
+sha512sums=('SKIP')
+
+pkgver() {
+    cd "$_pkgbase"
+    git describe --tags | sed -r 's/^v//;s/([^-]*-g)/r\1/;s/-/./g'
+}
+
+build() {
+    arch-meson "$_pkgbase" build64 \
+    --libdir lib/imgoverlay/lib64 \
+    --prefix /usr \
+    -Dappend_libdir_imgoverlay=false \
+    -Duse_system_vulkan=enabled
+
+    ninja -C build64
+
+    export CC="gcc -m32"
+    export CXX="g++ -m32"
+    export PKG_CONFIG_PATH="/usr/lib32/pkgconfig:/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib/pkgconfig:${PKG_CONFIG_PATH_32}"
+    export LLVM_CONFIG="/usr/bin/llvm-config32"
+
+    arch-meson "$_pkgbase" build32 \
+    --libdir lib/imgoverlay/lib32 \
+    --prefix /usr \
+    -Dappend_libdir_imgoverlay=false \
+    -Duse_system_vulkan=enabled \
+    -Dbuild_client=false
+
+    ninja -C build32
+}
+
+package_imgoverlay-git() {
+    pkgdesc=' A Vulkan and OpenGL overlay rendering images from shared memory'
+    conflicts=('imgoverlay')
+
+    DESTDIR="$pkgdir" ninja -C build64 install
+}
+
+package_lib32-imgoverlay-git() {
+    pkgdesc=' A Vulkan and OpenGL overlay rendering images from shared memory (32-bit)'
+    conflicts=('lib32-imgoverlay')
+
+    DESTDIR="$pkgdir" ninja -C build32 install
+}
+
+package_imgoverlay-common-git() {
+    pkgdesc='A Vulkan and OpenGL overlay rendering images from shared memory'
+    conflicts=('imgoverlay-common')
+
+    install -Dm664 "$_pkgbase/bin/imgoverlay.conf" "$pkgdir/usr/share/doc/imgoverlay/imgoverlay.conf.example"
+    install -Dm664 "$_pkgbase/bin/imgoverlayclient.conf" "$pkgdir/usr/share/doc/imgoverlay/imgoverlayclient.conf.example"
+    install -Dm664 "$_pkgbase/LICENSE" "$pkgdir/usr/share/licenses/$_pkgbase/LICENSE"
+}

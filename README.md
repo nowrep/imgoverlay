@@ -16,6 +16,7 @@ Started as [MangoHud](https://github.com/flightlessmango/MangoHud) fork.
 meson build
 meson install
 ```
+ArchLinux: [PKGBUILD](dist/PKGBUILD)
 
 # Usage
 
