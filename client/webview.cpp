@@ -3,6 +3,8 @@
 
 #include <QTimer>
 #include <QPaintEvent>
+#include <QVBoxLayout>
+#include <QDialog>
 
 WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget *parent)
     : QWebEngineView(parent)
@@ -90,8 +92,12 @@ bool WebView::eventFilter(QObject *o, QEvent *e)
 QWebEngineView *WebView::createWindow(QWebEnginePage::WebWindowType)
 {
     QWebEngineView *view = new QWebEngineView;
-    view->resize(640, 480);
-    view->show();
+    QVBoxLayout *layout = new QVBoxLayout;
+    layout->addWidget(view);
+    QDialog *dialog = new QDialog(parentWidget());
+    dialog->setLayout(layout);
+    dialog->resize(parentWidget()->width() * 0.8, parentWidget()->height() * 0.8);
+    dialog->show();
     return view;
 }
 
