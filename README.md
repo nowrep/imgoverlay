@@ -2,6 +2,8 @@
 
 A Vulkan and OpenGL overlay rendering images from shared memory.
 
+Started as [MangoHud](https://github.com/flightlessmango/MangoHud) fork.
+
 ## Building
 
 ```
@@ -17,4 +19,4 @@ IMGOVERLAY=1 /path/to/app
 
 ## Keybindings
 
-- `Shift_R+F12`: Toggle overlay
+- <kbd>Shift_R + F12</kbd>: Toggle overlay
