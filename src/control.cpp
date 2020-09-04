@@ -131,7 +131,7 @@ void Control::processSocket()
                 closeClient();
                 return;
             } else if (fd < 0) {
-                std::cout << "Error receiving fd " << fd << std::endl;
+                std::cerr << "Error receiving fd " << fd << std::endl;
                 closeClient();
                 return;
             }
