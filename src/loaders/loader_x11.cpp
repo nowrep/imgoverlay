@@ -15,7 +15,7 @@ bool libx11_loader::Load(const std::string& library_name) {
 
   library_ = dlopen(library_name.c_str(), RTLD_LAZY);
   if (!library_) {
-    std::cerr << "MANGOHUD: Failed to open " << "" MANGOHUD_ARCH << " " << library_name << ": " << dlerror() << std::endl;
+    std::cerr << "imgoverlay: Failed to open " << "" IMGOVERLAY_ARCH << " " << library_name << ": " << dlerror() << std::endl;
     return false;
   }
 

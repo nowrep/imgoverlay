@@ -6,7 +6,7 @@
     glX*;
     egl*;
     dlsym;
-    mangohud_find_glx_ptr;
-    mangohud_find_egl_ptr;
+    imgoverlay_find_glx_ptr;
+    imgoverlay_find_egl_ptr;
   local: *;
 };

@@ -11,7 +11,7 @@
 
 #include "imgui_hud.h"
 
-using namespace MangoHud::GL;
+using namespace imgoverlay::GL;
 
 #define EXPORT_C_(type) extern "C" __attribute__((__visibility__("default"))) type
 EXPORT_C_(void *) eglGetProcAddress(const char* procName);
@@ -30,7 +30,7 @@ void* get_egl_proc_address(const char* name) {
         func = get_proc_address( name );
 
     if (!func) {
-        std::cerr << "MANGOHUD: Failed to get function '" << name << "'" << std::endl;
+        std::cerr << "imgoverlay: Failed to get function '" << name << "'" << std::endl;
     }
 
     return func;
@@ -84,7 +84,7 @@ static std::array<const func_ptr, 1> name_to_funcptr_map = {{
 #undef ADD_HOOK
 }};
 
-EXPORT_C_(void *) mangohud_find_egl_ptr(const char *name)
+EXPORT_C_(void *) imgoverlay_find_egl_ptr(const char *name)
 {
   if (is_blacklisted())
       return nullptr;
@@ -100,7 +100,7 @@ EXPORT_C_(void *) mangohud_find_egl_ptr(const char *name)
 EXPORT_C_(void *) eglGetProcAddress(const char* procName) {
     //std::cerr << __func__ << ": " << procName << std::endl;
 
-    void* func = mangohud_find_egl_ptr(procName);
+    void* func = imgoverlay_find_egl_ptr(procName);
     if (func)
         return func;
 

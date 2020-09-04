@@ -16,7 +16,7 @@ bool init_x11() {
         return true;
 
     if (!g_x11->IsLoaded()) {
-        std::cerr << "MANGOHUD: X11 loader failed to load\n";
+        std::cerr << "imgoverlay: X11 loader failed to load\n";
         failed = true;
         return false;
     }
@@ -34,7 +34,7 @@ bool init_x11() {
 
     failed = !display;
     if (failed)
-        std::cerr << "MANGOHUD: XOpenDisplay failed to open display '" << displayid << "'\n";
+        std::cerr << "imgoverlay: XOpenDisplay failed to open display '" << displayid << "'\n";
 
     return !!display;
 }

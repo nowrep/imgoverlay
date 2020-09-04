@@ -18,7 +18,7 @@
 
 #include <glad/glad.h>
 
-namespace MangoHud { namespace GL {
+namespace imgoverlay { namespace GL {
 
 struct GLVec
 {
@@ -68,7 +68,7 @@ void imgui_init()
     if (cfg_inited)
         return;
     is_blacklisted(true);
-    parse_overlay_config(&params, getenv("MANGOHUD_CONFIG"));
+    parse_overlay_config(&params, getenv("IMGOVERLAY_CONFIG"));
     notifier.params = &params;
     start_notifier(notifier);
     window_size = ImVec2(params.width, params.height);

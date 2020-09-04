@@ -1,6 +1,4 @@
 #pragma once
-#ifndef MANGOHUD_OVERLAY_PARAMS_H
-#define MANGOHUD_OVERLAY_PARAMS_H
 
 #include <string>
 #include <vector>
@@ -53,5 +51,3 @@ void parse_overlay_config(struct overlay_params *params,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* MANGOHUD_OVERLAY_PARAMS_H */

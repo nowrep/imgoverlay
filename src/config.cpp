@@ -28,13 +28,13 @@ void parseConfigLine(std::string line, std::unordered_map<std::string,std::strin
 
 void enumerate_config_files(std::vector<std::string>& paths)
 {
-    static const char *mangohud_dir = "/MangoHud/";
+    static const char *imgoverlay_dir = "/imgoverlay/";
 
     std::string env_data = get_data_dir();
     std::string env_config = get_config_dir();
 
     if (!env_config.empty())
-        paths.push_back(env_config + mangohud_dir + "MangoHud.conf");
+        paths.push_back(env_config + imgoverlay_dir + "imgoverlay.conf");
 
     std::string exe_path = get_exe_path();
     auto n = exe_path.find_last_of('/');
@@ -42,16 +42,16 @@ void enumerate_config_files(std::vector<std::string>& paths)
         // as executable's name
         std::string basename = exe_path.substr(n + 1);
         if (!env_config.empty())
-            paths.push_back(env_config + mangohud_dir + basename + ".conf");
+            paths.push_back(env_config + imgoverlay_dir + basename + ".conf");
 
         // in executable's folder though not much sense in /usr/bin/
-        paths.push_back(exe_path.substr(0, n) + "/MangoHud.conf");
+        paths.push_back(exe_path.substr(0, n) + "/imgoverlay.conf");
 
         // find executable's path when run in Wine
         if (!env_config.empty() && (basename == "wine-preloader" || basename == "wine64-preloader")) {
             std::string name;
             if (get_wine_exe_name(name)) {
-                paths.push_back(env_config + mangohud_dir + "wine-" + name + ".conf");
+                paths.push_back(env_config + imgoverlay_dir + "wine-" + name + ".conf");
             }
         }
     }
@@ -60,7 +60,7 @@ void enumerate_config_files(std::vector<std::string>& paths)
 void parseConfigFile(overlay_params& params) {
     params.options.clear();
     std::vector<std::string> paths;
-    const char *cfg_file = getenv("MANGOHUD_CONFIGFILE");
+    const char *cfg_file = getenv("IMGOVERLAY_CONFIGFILE");
 
     if (cfg_file)
         paths.push_back(cfg_file);

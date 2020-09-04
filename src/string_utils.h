@@ -1,6 +1,4 @@
 #pragma once
-#ifndef MANGOHUD_STRING_UTILS_H
-#define MANGOHUD_STRING_UTILS_H
 
 #include <string>
 #include <iomanip>
@@ -110,5 +108,3 @@ static float parse_float(const std::string& s, std::size_t* float_len = nullptr)
 }
 
 #pragma GCC diagnostic pop
-
-#endif //MANGOHUD_STRING_UTILS_H

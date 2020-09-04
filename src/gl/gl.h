@@ -1,6 +1,4 @@
 #pragma once
-#ifndef MANGOHUD_GL_GL_H
-#define MANGOHUD_GL_GL_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,5 +25,3 @@ unsigned int eglSwapBuffers( void*, void* );
 #ifdef __cplusplus
 }
 #endif //__cplusplus
-
-#endif //MANGOHUD_GL_GL_H

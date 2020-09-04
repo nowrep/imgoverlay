@@ -1253,7 +1253,7 @@ static void setup_swapchain_data_pipeline(struct swapchain_data *data)
    io.Fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
    io.Fonts->TexID = (ImTextureID)create_image_with_desc(data, width, height, VK_FORMAT_R8_UNORM, data->font_image, data->font_mem, data->font_image_view);
 #ifndef NDEBUG
-   std::cerr << "MANGOHUD: Default font tex size: " << width << "x" << height << "px (" << (width*height*1) << " bytes)" << "\n";
+   std::cerr << "imgoverlay: Default font tex size: " << width << "x" << height << "px (" << (width*height*1) << " bytes)" << "\n";
 #endif
 }
 
@@ -1608,7 +1608,7 @@ static VkResult overlay_CreateInstance(
    instance_data_map_physical_devices(instance_data, true);
 
    if (!is_blacklisted()) {
-      parse_overlay_config(&instance_data->params, getenv("MANGOHUD_CONFIG"));
+      parse_overlay_config(&instance_data->params, getenv("IMGOVERLAY_CONFIG"));
       instance_data->control = new Control(instance_data->params.control);
    }
 

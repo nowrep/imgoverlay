@@ -54,7 +54,7 @@ parse_string_to_keysym_vec(const char *str)
          if (xk)
             keys.push_back(xk);
          else
-            std::cerr << "MANGOHUD: Unrecognized key: '" << ks << "'\n";
+            std::cerr << "imgoverlay: Unrecognized key: '" << ks << "'\n";
       }
    }
    return keys;
@@ -218,7 +218,7 @@ parse_overlay_config(struct overlay_params *params,
 
    }
 
-   // second pass, override config file settings with MANGOHUD_CONFIG
+   // second pass, override config file settings with IMGOVERLAY_CONFIG
    if (env)
       parse_overlay_env(params, env);
 

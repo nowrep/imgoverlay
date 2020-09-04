@@ -12,8 +12,8 @@
 
 void *(*__dlopen)(const char *, int) = nullptr;
 void *(*__dlsym)(void *, const char *) = nullptr;
-static bool print_dlopen = getenv("MANGOHUD_DEBUG_DLOPEN") != nullptr;
-static bool print_dlsym = getenv("MANGOHUD_DEBUG_DLSYM") != nullptr;
+static bool print_dlopen = getenv("IMGOVERLAY_DEBUG_DLOPEN") != nullptr;
+static bool print_dlsym = getenv("IMGOVERLAY_DEBUG_DLSYM") != nullptr;
 
 void get_real_functions()
 {
@@ -91,21 +91,21 @@ void* get_proc_address(const char* name) {
 }
 
 #ifdef HOOK_DLSYM
-EXPORT_C_(void *) mangohud_find_glx_ptr(const char *name);
-EXPORT_C_(void *) mangohud_find_egl_ptr(const char *name);
+EXPORT_C_(void *) imgoverlay_find_glx_ptr(const char *name);
+EXPORT_C_(void *) imgoverlay_find_egl_ptr(const char *name);
 
 EXPORT_C_(void*) dlsym(void * handle, const char * name)
 {
     void* func = nullptr;
 #ifdef HAVE_X11
-    func = mangohud_find_glx_ptr(name);
+    func = imgoverlay_find_glx_ptr(name);
     if (func) {
         //fprintf(stderr,"%s: local: %s\n",  __func__ , name);
         return func;
     }
 #endif
 
-    func = mangohud_find_egl_ptr(name);
+    func = imgoverlay_find_egl_ptr(name);
     if (func) {
         //fprintf(stderr,"%s: local: %s\n",  __func__ , name);
         return func;

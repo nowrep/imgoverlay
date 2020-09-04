@@ -1,6 +1,4 @@
 #pragma once
-#ifndef MANGOHUD_TIMING_HPP
-#define MANGOHUD_TIMING_HPP
 
 #include <chrono>
 
@@ -19,5 +17,3 @@ public:
 };
 
 using Clock = MesaClock;
-
-#endif //MANGOHUD_TIMING_HPP

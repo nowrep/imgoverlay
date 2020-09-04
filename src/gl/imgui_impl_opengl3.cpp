@@ -74,7 +74,7 @@
 
 #include "overlay.h"
 
-namespace MangoHud {
+namespace imgoverlay {
 
 // Desktop GL 3.2+ has glDrawElementsBaseVertex() which GL ES and WebGL don't have.
 #if defined(IMGUI_IMPL_OPENGL_ES2) || defined(IMGUI_IMPL_OPENGL_ES3) || !defined(GL_VERSION_3_2)
@@ -482,7 +482,7 @@ void    ImGui_ImplOpenGL3_NewFrame()
         ImGui_ImplOpenGL3_CreateDeviceObjects();
     if (!glIsTexture(g_FontTexture)) {
 #ifndef NDEBUG
-        fprintf(stderr, "MANGOHUD: GL Texture lost? Regenerating.\n");
+        fprintf(stderr, "imgoverlay: GL Texture lost? Regenerating.\n");
 #endif
         g_FontTexture = 0;
         ImGui_ImplOpenGL3_CreateFontsTexture();

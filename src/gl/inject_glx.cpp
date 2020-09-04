@@ -17,7 +17,7 @@
 
 #include "imgui_hud.h"
 
-using namespace MangoHud::GL;
+using namespace imgoverlay::GL;
 
 #define EXPORT_C_(type) extern "C" __attribute__((__visibility__("default"))) type
 
@@ -47,7 +47,7 @@ void* get_glx_proc_address(const char* name) {
         func = get_proc_address( name );
 
     if (!func) {
-        std::cerr << "MANGOHUD: Failed to get function '" << name << "'" << std::endl;
+        std::cerr << "imgoverlay: Failed to get function '" << name << "'" << std::endl;
     }
 
     return func;
@@ -85,7 +85,7 @@ EXPORT_C_(int) glXMakeCurrent(void* dpy, void* drawable, void* ctx) {
                     gl_threads.push_back(std::this_thread::get_id());
                 imgui_set_context(ctx);
 #ifndef NDEBUG
-                std::cerr << "MANGOHUD: GL thread count: " << gl_threads.size() << "\n";
+                std::cerr << "imgoverlay: GL thread count: " << gl_threads.size() << "\n";
 #endif
             }
         }
@@ -230,7 +230,7 @@ static std::array<const func_ptr, 10> name_to_funcptr_map = {{
 #undef ADD_HOOK
 }};
 
-EXPORT_C_(void *) mangohud_find_glx_ptr(const char *name)
+EXPORT_C_(void *) imgoverlay_find_glx_ptr(const char *name)
 {
   if (is_blacklisted())
       return nullptr;
@@ -246,7 +246,7 @@ EXPORT_C_(void *) mangohud_find_glx_ptr(const char *name)
 EXPORT_C_(void *) glXGetProcAddress(const unsigned char* procName) {
     //std::cerr << __func__ << ":" << procName << std::endl;
 
-    void* func = mangohud_find_glx_ptr( (const char*)procName );
+    void* func = imgoverlay_find_glx_ptr( (const char*)procName );
     if (func)
         return func;
 
@@ -256,7 +256,7 @@ EXPORT_C_(void *) glXGetProcAddress(const unsigned char* procName) {
 EXPORT_C_(void *) glXGetProcAddressARB(const unsigned char* procName) {
     //std::cerr << __func__ << ":" << procName << std::endl;
 
-    void* func = mangohud_find_glx_ptr( (const char*)procName );
+    void* func = imgoverlay_find_glx_ptr( (const char*)procName );
     if (func)
         return func;
 

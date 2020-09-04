@@ -1,6 +1,6 @@
-project('MangoHud',
+project('imgoverlay',
   ['c', 'cpp'],
-  version : 'v0.4.0',
+  version : 'v0.1.0',
   license : 'MIT',
   default_options : ['buildtype=release', 'c_std=c99', 'cpp_std=c++14']
 )
@@ -10,7 +10,7 @@ cpp = meson.get_compiler('cpp')
 prog_python = import('python').find_installation('python3')
 null_dep = dependency('', required : false)
 
-mangohud_version = vcs_tag(
+imgoverlay_version = vcs_tag(
   command: ['git', 'describe', '--tags', '--dirty=+'],
   input:  'version.h.in',
   output: 'version.h')
@@ -188,9 +188,9 @@ util_files = files(
 
 sizeof_ptr = cc.sizeof('void*')
 if sizeof_ptr == 8
-  pre_args += '-DMANGOHUD_ARCH="64bit"'
+  pre_args += '-DIMGOVERLAY_ARCH="64bit"'
 elif sizeof_ptr == 4
-  pre_args += '-DMANGOHUD_ARCH="32bit"'
+  pre_args += '-DIMGOVERLAY_ARCH="32bit"'
 endif
 
 dearimgui_sp = subproject('dearimgui')

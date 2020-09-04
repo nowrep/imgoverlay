@@ -1,10 +1,10 @@
 glslang = find_program('glslangValidator')
 
 # Needs prefix for configure_file()
-if get_option('append_libdir_mangohud')
-  libdir_mangohud = join_paths(get_option('prefix'), get_option('libdir'), 'mangohud')
+if get_option('append_libdir_imgoverlay')
+  libdir_imgoverlay = join_paths(get_option('prefix'), get_option('libdir'), 'imgoverlay')
 else
-  libdir_mangohud = join_paths(get_option('prefix'), get_option('libdir'))
+  libdir_imgoverlay = join_paths(get_option('prefix'), get_option('libdir'))
 endif
 
 overlay_shaders = [
@@ -55,11 +55,11 @@ endif
 
 link_args = cc.get_supported_link_arguments(['-Wl,-Bsymbolic-functions', '-Wl,-z,relro', '-Wl,--exclude-libs,ALL'])
 # meson fails to check version-script so just force add
-link_args += '-Wl,--version-script,@0@'.format(join_paths(meson.current_source_dir(), 'mangohud.version'))
+link_args += '-Wl,--version-script,@0@'.format(join_paths(meson.current_source_dir(), 'imgoverlay.version'))
 
 vklayer_mesa_overlay = shared_library(
-  'MangoHud',
-  mangohud_version,
+  'Imgoverlay',
+  imgoverlay_version,
   util_files,
   vk_enum_to_str,
   vklayer_files,
@@ -84,12 +84,12 @@ vklayer_mesa_overlay = shared_library(
     dep_vulkan],
   include_directories : [inc_common],
   link_args : link_args,
-  install_dir : libdir_mangohud,
+  install_dir : libdir_imgoverlay,
   install : true
 )
 
-#mangohud_dlsym = shared_library(
-#  'MangoHud_dlsym',
+#imgoverlay_dlsym = shared_library(
+#  'Imgoverlay_dlsym',
 #  files(
 #    'elfhacks.cpp',
 #    'real_dlsym.cpp',
@@ -106,13 +106,13 @@ vklayer_mesa_overlay = shared_library(
 #  dependencies : [dep_dl],
 #  include_directories : [inc_common],
 #  link_args : link_args,
-#  install_dir : libdir_mangohud,
+#  install_dir : libdir_imgoverlay,
 #  install : true
 #)
 
-configure_file(input : 'mangohud.json.in',
+configure_file(input : 'imgoverlay.json.in',
   output : '@0@.@1@.json'.format(meson.project_name(), target_machine.cpu_family()),
-  configuration : {'libdir_mangohud' : libdir_mangohud + '/',
+  configuration : {'libdir_imgoverlay' : libdir_imgoverlay + '/',
                   'PROJECT_NAME' : meson.project_name() + ' ',
                   'LAYER_SUFFIX' : target_machine.cpu_family()},
   install : true,
@@ -120,16 +120,16 @@ configure_file(input : 'mangohud.json.in',
 )
 
 if target_machine.cpu_family() == 'x86_64'
-  mangohud_cpu_family = ''
-  mangohud_opposite_bin = 'mangohud.x86'
+  imgoverlay_cpu_family = ''
+  imgoverlay_opposite_bin = 'imgoverlay.x86'
 else
-  mangohud_cpu_family = '.@0@'.format(target_machine.cpu_family())
+  imgoverlay_cpu_family = '.@0@'.format(target_machine.cpu_family())
 #this is probably dumb but works for now
-  mangohud_opposite_bin = 'intentionally_borked'
+  imgoverlay_opposite_bin = 'intentionally_borked'
 endif
 
-configure_file(input : '../bin/mangohud.in',
-  output : 'mangohud@0@'.format(mangohud_cpu_family),
-  configuration : {'libdir_mangohud' : libdir_mangohud, 'mangohud_sh' : mangohud_opposite_bin},
-  install_dir : get_option('bindir'),
-)
+# configure_file(input : '../bin/imgoverlay.in',
+#   output : 'imgoverlay@0@'.format(imgoverlay_cpu_family),
+#   configuration : {'libdir_imgoverlay' : libdir_imgoverlay, 'imgoverlay_sh' : imgoverlay_opposite_bin},
+#   install_dir : get_option('bindir'),
+# )

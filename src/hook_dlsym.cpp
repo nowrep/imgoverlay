@@ -9,10 +9,10 @@ EXPORT_C_(void*) dlsym(void * handle, const char * name)
     static void *(*find_egl_ptr)(const char *name) = nullptr;
 
     if (!find_glx_ptr)
-        find_glx_ptr = reinterpret_cast<decltype(find_glx_ptr)> (real_dlsym(RTLD_NEXT, "mangohud_find_glx_ptr"));
+        find_glx_ptr = reinterpret_cast<decltype(find_glx_ptr)> (real_dlsym(RTLD_NEXT, "imgoverlay_find_glx_ptr"));
 
     if (!find_egl_ptr)
-        find_egl_ptr = reinterpret_cast<decltype(find_egl_ptr)> (real_dlsym(RTLD_NEXT, "mangohud_find_egl_ptr"));
+        find_egl_ptr = reinterpret_cast<decltype(find_egl_ptr)> (real_dlsym(RTLD_NEXT, "imgoverlay_find_egl_ptr"));
 
     void* func = nullptr;
 

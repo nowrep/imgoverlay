@@ -4,19 +4,18 @@
       "name": "@PROJECT_NAME@@LAYER_SUFFIX@",
       "type": "GLOBAL",
       "api_version": "1.2.135",
-      "library_path": "@libdir_mangohud@libMangoHud.so",
+      "library_path": "@libdir_imgoverlay@libImgoverlay.so",
       "implementation_version": "1",
-      "description": "Vulkan Hud Overlay",
+      "description": "Vulkan Img Overlay",
       "functions": {
          "vkGetInstanceProcAddr": "overlay_GetInstanceProcAddr",
          "vkGetDeviceProcAddr": "overlay_GetDeviceProcAddr"
       },
       "enable_environment": {
-        "MANGOHUD": "1"
+        "IMGOVERLAY": "1"
       },
       "disable_environment": {
-        "DISABLE_MANGOHUD": "1"
+        "DISABLE_IMGOVERLAY": "1"
       }
     }
 }
-  
