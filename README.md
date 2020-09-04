@@ -6,17 +6,61 @@ Started as [MangoHud](https://github.com/flightlessmango/MangoHud) fork.
 
 ## Building
 
-```
+#### Dependencies
+* python3
+* Xlib
+* Qt5 - QtWebEngineWidgets
+
+#### Build
+```sh
 meson build
 meson install
 ```
 
-# Normal usage
+# Usage
 
-```
+## Run Vulkan/OpenGL app
+```sh
+# Vulkan
 IMGOVERLAY=1 /path/to/app
+# OpenGL
+TODO
 ```
 
-## Keybindings
+#### Configuration (app)
+* `IMGOVERLAY_CONFIGFILE` env variable
+* `~/.config/imgoverlay/<APP>.conf` (eg. `~/.config/imgoverlay/vkcube.conf`)
+* `~/.config/imgoverlay/overlay.conf`
 
-- <kbd>Shift_R + F12</kbd>: Toggle overlay
+```ini
+control = /tmp/imgoverlay.socket
+toggle_overlay = Shift_R+F12
+```
+
+## Run client
+```sh
+imgoverlayclient [--tray] [config-file]
+```
+* `--tray` start minimized in system tray
+* `config-file` path to config file (default `~/.config/imgoverlayclient.conf`)
+
+#### Configuration (client)
+
+```ini
+[General]
+Socket=/tmp/imgoverlay.socket
+
+[Github_example]
+Url=https://github.com/nowrep/imgoverlay
+X=5
+Y=15
+Width=300
+Height=400
+
+[Another_site]
+Url=https://google.com
+X=0
+Y=0
+Width=100
+Height=100
+```

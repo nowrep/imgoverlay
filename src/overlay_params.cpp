@@ -61,13 +61,13 @@ parse_string_to_keysym_vec(const char *str)
 }
 
 static std::vector<KeySym>
-parse_toggle_hud(const char *str)
+parse_toggle_overlay(const char *str)
 {
    return parse_string_to_keysym_vec(str);
 }
 
 #else
-#define parse_toggle_hud(x)      {}
+#define parse_toggle_overlay(x)      {}
 #endif
 
 #define parse_control(s) parse_string(s)
@@ -178,7 +178,7 @@ parse_overlay_config(struct overlay_params *params,
    params->font_scale = 1.0f;
 
 #ifdef HAVE_X11
-   params->toggle_hud = { XK_Shift_R, XK_F12 };
+   params->toggle_overlay = { XK_Shift_R, XK_F12 };
 #endif
 
    // first pass with env var

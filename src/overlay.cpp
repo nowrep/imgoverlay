@@ -440,7 +440,7 @@ void check_keybinds(struct overlay_params& params){
 
    if (elapsedF12 >= keyPressDelay){
 #ifdef HAVE_X11
-      pressed = keys_are_pressed(params.toggle_hud);
+      pressed = keys_are_pressed(params.toggle_overlay);
 #else
       pressed = false;
 #endif
