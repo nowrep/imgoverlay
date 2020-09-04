@@ -33,8 +33,8 @@ TODO
 * `~/.config/imgoverlay/overlay.conf`
 
 ```ini
-control = /tmp/imgoverlay.socket
-toggle_overlay = Shift_R+F12
+control=/tmp/imgoverlay.socket
+toggle_overlay=Shift_R+F12
 ```
 
 ## Run client
@@ -52,15 +52,15 @@ Socket=/tmp/imgoverlay.socket
 
 [Github_example]
 Url=https://github.com/nowrep/imgoverlay
-X=5
-Y=15
-Width=300
-Height=400
+X=0
+Y=0
+Width=200
+Height=200
 
 [Another_site]
 Url=https://google.com
-X=0
-Y=0
+X=210
+Y=210
 Width=100
 Height=100
 ```

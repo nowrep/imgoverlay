@@ -128,8 +128,8 @@ else
   imgoverlay_opposite_bin = 'intentionally_borked'
 endif
 
-# configure_file(input : '../bin/imgoverlay.in',
-#   output : 'imgoverlay@0@'.format(imgoverlay_cpu_family),
-#   configuration : {'libdir_imgoverlay' : libdir_imgoverlay, 'imgoverlay_sh' : imgoverlay_opposite_bin},
-#   install_dir : get_option('bindir'),
-# )
+configure_file(input : '../bin/imgoverlay.in',
+  output : 'imgoverlay@0@'.format(imgoverlay_cpu_family),
+  configuration : {'libdir_imgoverlay' : libdir_imgoverlay, 'imgoverlay_sh' : imgoverlay_opposite_bin},
+  install_dir : get_option('bindir'),
+)

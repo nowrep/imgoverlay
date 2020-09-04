@@ -1,8 +1,8 @@
 #!/bin/sh
 
-MANGOHUD_LIB_NAME="libMangoHud.so"
-if [ "$MANGOHUD_NODLSYM" = "1" ]; then
-	MANGOHUD_LIB_NAME="libMangoHud_nodlsym.so"
+IMGOVERLAY_LIB_NAME="libImgoverlay.so"
+if [ "$IMGOVERLAY_NODLSYM" = "1" ]; then
+	IMGOVERLAY_LIB_NAME="libImgoverlay_nodlsym.so"
 fi
 
 if [ "$#" -eq 0 ]; then
@@ -15,6 +15,6 @@ fi
 
 # Execute the program under a clean environment
 # pass through the overriden LD_PRELOAD environment variables
-LD_PRELOAD="${LD_PRELOAD}:${MANGOHUD_LIB_NAME}"
+LD_PRELOAD="${LD_PRELOAD}:${IMGOVERLAY_LIB_NAME}"
 
-exec env MANGOHUD=1 LD_PRELOAD="${LD_PRELOAD}" "$@"
+exec env IMGOVERLAY=1 LD_PRELOAD="${LD_PRELOAD}" "$@"
