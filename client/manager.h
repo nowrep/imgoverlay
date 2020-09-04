@@ -10,6 +10,7 @@ class QTabBar;
 class QWidget;
 class QLocalSocket;
 class QSystemTrayIcon;
+class QLabel;
 
 class WebView;
 
@@ -34,6 +35,7 @@ Q_SIGNALS:
 private:
     void initWebViews();
     void showView(int index);
+    void updateStatus();
 
     QString m_confFile;
     QString m_socketPath;
@@ -41,6 +43,7 @@ private:
     QTimer *m_reconnectTimer;
     QVector<WebView*> m_views;
 
+    QLabel *m_statusLabel;
     QTabBar *m_tabBar;
     QWidget *m_container;
     QWidget *m_window;

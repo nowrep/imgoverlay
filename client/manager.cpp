@@ -11,6 +11,7 @@
 #include <QTabBar>
 #include <QVBoxLayout>
 #include <QSystemTrayIcon>
+#include <QLabel>
 
 Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     : QObject(parent)
@@ -23,6 +24,7 @@ Manager::Manager(const QString &confFile, bool tray, QObject *parent)
 
     m_socket = new QLocalSocket(this);
     connect(m_socket, &QLocalSocket::stateChanged, this, [this](QLocalSocket::LocalSocketState state) {
+        updateStatus();
         if (state == QLocalSocket::ConnectedState) {
             QTimer::singleShot(0, this, &Manager::socketConnected);
         } else if (state == QLocalSocket::UnconnectedState) {
@@ -53,9 +55,13 @@ Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     QWebEngineSettings::defaultSettings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
 
     QVBoxLayout *layout = new QVBoxLayout;
+    m_statusLabel = new QLabel;
+    m_statusLabel->setAlignment(Qt::AlignCenter);
     m_tabBar = new QTabBar;
     connect(m_tabBar, &QTabBar::currentChanged, this, &Manager::showView);
     m_container = new QWidget;
+    m_container->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    layout->addWidget(m_statusLabel);
     layout->addWidget(m_tabBar);
     layout->addWidget(m_container);
 
@@ -79,6 +85,7 @@ Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     });
 
     initWebViews();
+    updateStatus();
     m_reconnectTimer->start();
 }
 
@@ -183,4 +190,10 @@ void Manager::showView(int index)
             m_views.at(i)->move(9999, 9999);
         }
     }
+}
+
+void Manager::updateStatus()
+{
+    const QString s = isConnected() ? QStringLiteral("Connected") : QStringLiteral("Connecting...");
+    m_statusLabel->setText(QStringLiteral("Socket: %1 | Status: %2").arg(m_socketPath, s));
 }
