@@ -17,7 +17,7 @@ class Manager : public QObject
     Q_OBJECT
 
 public:
-    explicit Manager(QObject *parent = nullptr);
+    explicit Manager(const QString &confFile, bool tray, QObject *parent = nullptr);
     ~Manager();
 
     bool isConnected() const;

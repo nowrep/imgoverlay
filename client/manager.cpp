@@ -11,10 +11,13 @@
 #include <QTabBar>
 #include <QVBoxLayout>
 
-Manager::Manager(QObject *parent)
+Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     : QObject(parent)
+    , m_confFile(confFile)
 {
-    m_confFile = QApplication::applicationDirPath() + QStringLiteral("/overlay.conf");
+    if (m_confFile.isEmpty()) {
+        m_confFile = QDir::homePath() + QLatin1String("/.config/imgoverlayclient.conf");
+    }
     m_socketPath = QSettings(m_confFile, QSettings::IniFormat).value(QStringLiteral("Socket"), QStringLiteral("/tmp/imgoverlay.socket")).toString();
 
     m_socket = new QLocalSocket(this);
