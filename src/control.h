@@ -35,6 +35,7 @@ private:
     void processDestroyImageMsg(struct msg_struct *msg, struct reply_struct *reply);
     void processDestroyAllImagesMsg(struct msg_struct *msg, struct reply_struct *reply);
 
+    void init();
     void closeClient();
     void destroyImage(OverlayImage &img);
     void destroyAllImages();
@@ -42,6 +43,7 @@ private:
     std::string m_socketPath;
     std::unordered_map<uint8_t, OverlayImage> m_images;
 
+    bool m_init = false;
     int m_client = -1;
     int m_server = -1;
     uint8_t m_waitingId = 0;

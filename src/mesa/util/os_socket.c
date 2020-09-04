@@ -36,7 +36,9 @@ os_socket_listen_abstract(const char *path, int count)
    if (ret < 0)
       return -1;
 
-   listen(s, count);
+   ret = listen(s, count);
+   if (ret < 0)
+      return -1;
 
    return s;
 }

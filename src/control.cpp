@@ -80,19 +80,15 @@ struct reply_struct {
 Control::Control(const std::string &socketPath)
     : m_socketPath(socketPath)
 {
-    unlink(m_socketPath.c_str());
-    m_server = os_socket_listen_abstract(m_socketPath.c_str(), 1);
-    if (m_server < 0) {
-        std::cerr << "Couldn't create socket at " << m_socketPath << ": " << strerror(errno) << std::endl;
-    } else {
-        os_socket_block(m_server, false);
-    }
 }
 
 Control::~Control()
 {
-    os_socket_close(m_server);
-    m_server = -1;
+    if (m_server >= 0) {
+        os_socket_close(m_server);
+        unlink(m_socketPath.c_str());
+        m_server = -1;
+    }
 }
 
 const std::unordered_map<uint8_t, OverlayImage> &Control::images() const
@@ -159,6 +155,8 @@ static int receive_fd(int socket)
 
 void Control::processSocket()
 {
+    init();
+
     if (m_server < 0) {
         return;
     }
@@ -398,6 +396,22 @@ void Control::processDestroyAllImagesMsg(struct msg_struct *msg, struct reply_st
     destroyAllImages();
 
     reply->status = STATUS_OK;
+}
+
+void Control::init()
+{
+    if (m_init) {
+        return;
+    }
+    m_init = true;
+
+    unlink(m_socketPath.c_str());
+    m_server = os_socket_listen_abstract(m_socketPath.c_str(), 1);
+    if (m_server < 0) {
+        std::cerr << "Couldn't create socket at " << m_socketPath << ": " << strerror(errno) << std::endl;
+        return;
+    }
+    os_socket_block(m_server, false);
 }
 
 void Control::closeClient()
