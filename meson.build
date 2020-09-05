@@ -1,6 +1,6 @@
 project('imgoverlay',
   ['c', 'cpp'],
-  version : 'v0.1.0',
+  version : 'v0.2',
   license : 'MIT',
   default_options : ['buildtype=release', 'c_std=c99', 'cpp_std=c++14']
 )
