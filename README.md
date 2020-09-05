@@ -7,6 +7,7 @@ Started as [MangoHud](https://github.com/flightlessmango/MangoHud) fork.
 ## Building
 
 #### Dependencies
+* glslangValidator
 * python3
 * Xlib
 * Qt5 - QtWebEngineWidgets
