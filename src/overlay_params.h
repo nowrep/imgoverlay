@@ -18,7 +18,7 @@ typedef unsigned long KeySym;
 
 #define OVERLAY_PARAMS                               \
    OVERLAY_PARAM_CUSTOM(no_display)                  \
-   OVERLAY_PARAM_CUSTOM(control)                     \
+   OVERLAY_PARAM_CUSTOM(socket)                      \
    OVERLAY_PARAM_CUSTOM(font_size)                   \
    OVERLAY_PARAM_CUSTOM(font_scale)                  \
    OVERLAY_PARAM_CUSTOM(toggle_overlay)              \
@@ -35,7 +35,7 @@ enum overlay_param_enabled {
 struct overlay_params {
    bool enabled[OVERLAY_PARAM_ENABLED_MAX];
    bool no_display;
-   std::string control;
+   std::string socket;
    std::vector<KeySym> toggle_overlay;
    float font_size, font_scale;
    std::unordered_map<std::string,std::string> options;

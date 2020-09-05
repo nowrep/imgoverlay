@@ -34,7 +34,7 @@ TODO
 * `~/.config/imgoverlay/overlay.conf`
 
 ```ini
-control=/tmp/imgoverlay.socket
+socket=/tmp/imgoverlay.socket
 toggle_overlay=Shift_R+F12
 ```
 

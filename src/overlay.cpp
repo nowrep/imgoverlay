@@ -1609,7 +1609,7 @@ static VkResult overlay_CreateInstance(
    if (!is_blacklisted()) {
       std::cout << "imgoverlay " << IMGOVERLAY_VERSION << std::endl;
       parse_overlay_config(&instance_data->params, getenv("IMGOVERLAY_CONFIG"));
-      instance_data->control = new Control(instance_data->params.control);
+      instance_data->control = new Control(instance_data->params.socket);
    }
 
    return result;

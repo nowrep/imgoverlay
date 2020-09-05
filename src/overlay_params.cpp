@@ -70,7 +70,7 @@ parse_toggle_overlay(const char *str)
 #define parse_toggle_overlay(x)      {}
 #endif
 
-#define parse_control(s) parse_string(s)
+#define parse_socket(s) parse_string(s)
 #define parse_font_scale(s) parse_float(s)
 #define parse_font_size(s) parse_float(s)
 
@@ -174,7 +174,7 @@ parse_overlay_config(struct overlay_params *params,
 
    *params = {};
 
-   params->control = "/tmp/imgoverlay.socket";
+   params->socket = "/tmp/imgoverlay.socket";
    params->font_scale = 1.0f;
 
 #ifdef HAVE_X11
