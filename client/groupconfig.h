@@ -13,6 +13,7 @@ public:
     int width() const;
     int height() const;
     QUrl url() const;
+    QString injectScript() const;
 
 private:
     QVariant value(const QString &key) const;
@@ -25,4 +26,5 @@ private:
     int m_width = 0;
     int m_height = 0;
     QUrl m_url;
+    QString m_injectScript;
 };

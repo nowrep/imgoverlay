@@ -8,9 +8,9 @@ client_files = files(
   'groupconfig.cpp',
   'manager.cpp',
   'webview.cpp',
+  'utils.cpp',
 )
 client_headers = files(
-  'groupconfig.h',
   'manager.h',
   'webview.h',
 )

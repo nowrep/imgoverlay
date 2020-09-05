@@ -51,6 +51,13 @@ WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget 
         }
         m_waitReply = false;
     });
+
+    connect(this, &WebView::loadFinished, this, [this](bool ok) {
+        if (!ok || m_conf.injectScript().isEmpty()) {
+            return;
+        }
+        page()->runJavaScript(QStringLiteral("(function(){%1}());").arg(m_conf.injectScript()));
+    });
 }
 
 WebView::~WebView()

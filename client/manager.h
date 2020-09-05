@@ -37,6 +37,7 @@ private:
     void initWebViews();
     void showView(int index);
     void updateStatus();
+    QString resolvePath(const QString &path) const;
 
     QSettings m_settings;
     QString m_socketPath;

@@ -1,5 +1,6 @@
 #include "manager.h"
 #include "webview.h"
+#include "utils.h"
 
 #include <QDir>
 #include <QTimer>
@@ -12,12 +13,13 @@
 #include <QVBoxLayout>
 #include <QSystemTrayIcon>
 #include <QLabel>
+#include <QFileInfo>
 
 Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     : QObject(parent)
     , m_settings(confFile.isEmpty() ? QDir::homePath() + QLatin1String("/.config/imgoverlayclient.conf") : confFile, QSettings::IniFormat)
 {
-    m_socketPath = m_settings.value(QStringLiteral("Socket"), QStringLiteral("/tmp/imgoverlay.socket")).toString();
+    m_socketPath = resolvePath(m_settings.value(QStringLiteral("Socket"), QStringLiteral("/tmp/imgoverlay.socket")).toString());
 
     m_socket = new QLocalSocket(this);
     connect(m_socket, &QLocalSocket::stateChanged, this, [this](QLocalSocket::LocalSocketState state) {
@@ -48,7 +50,7 @@ Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     });
 
     QWebEngineProfile::defaultProfile()->setHttpCacheType(QWebEngineProfile::MemoryHttpCache);
-    QWebEngineProfile::defaultProfile()->setPersistentStoragePath(m_settings.value(QStringLiteral("Cache"), QStringLiteral("%1/.cache/imgoverlayclient").arg(QDir::homePath())).toString());
+    QWebEngineProfile::defaultProfile()->setPersistentStoragePath(resolvePath(m_settings.value(QStringLiteral("Cache"), QStringLiteral("cache")).toString()));
     QWebEngineSettings::defaultSettings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
 
     QVBoxLayout *layout = new QVBoxLayout;
@@ -192,4 +194,9 @@ void Manager::updateStatus()
 {
     const QString s = isConnected() ? QStringLiteral("Connected") : QStringLiteral("Connecting...");
     m_statusLabel->setText(QStringLiteral("Socket: %1 | Status: %2").arg(m_socketPath, s));
+}
+
+QString Manager::resolvePath(const QString &path) const
+{
+    return Utils::resolvedPath(path, QFileInfo(m_settings.fileName()).path());
 }
