@@ -21,6 +21,13 @@ WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget 
 
     initMemory();
 
+    m_updateTimer = new QTimer(this);
+    m_updateTimer->setSingleShot(true);
+    m_updateTimer->setInterval(200);
+    connect(m_updateTimer, &QTimer::timeout, this, [this]() {
+        focusProxy()->update();
+    });
+
     connect(m_manager, &Manager::socketConnected, this, [this]() {
         char buf[MSG_BUF_SIZE];
         memset(buf, 0, MSG_BUF_SIZE);
@@ -45,9 +52,6 @@ WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget 
     connect(m_manager, &Manager::replyReceived, this, [this](struct reply_struct *reply) {
         if (reply->id != m_id) {
             return;
-        }
-        if (reply->msgtype == MSG_CREATE_IMAGE) {
-            focusProxy()->update();
         }
         m_waitReply = false;
     });
@@ -75,8 +79,10 @@ bool WebView::eventFilter(QObject *o, QEvent *e)
     if (o == focusProxy() && e->type() == QEvent::Paint) {
         QTimer::singleShot(0, this, [=]() {
             if (m_waitReply || !m_manager->isConnected()) {
+                m_updateTimer->start();
                 return;
             }
+            m_updateTimer->stop();
 
             m_buffer = (m_buffer + 1) % 2;
             uchar *memory = (uchar*)m_memory + (PIXELS_SIZE(m_conf.width(), m_conf.height()) * m_buffer);

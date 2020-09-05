@@ -5,6 +5,8 @@
 
 #include <QWebEngineView>
 
+class QTimer;
+
 class WebView : public QWebEngineView
 {
     Q_OBJECT
@@ -23,7 +25,9 @@ private:
     GroupConfig m_conf;
     Manager *m_manager;
 
+    QTimer *m_updateTimer;
     bool m_waitReply = false;
+
     int m_memfd = -1;
     void *m_memory = nullptr;
     uint32_t m_memsize = 0;
