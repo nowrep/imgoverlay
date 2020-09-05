@@ -31,7 +31,7 @@ TODO
 #### Configuration (app)
 * `IMGOVERLAY_CONFIGFILE` env variable
 * `~/.config/imgoverlay/<APP>.conf` (eg. `~/.config/imgoverlay/vkcube.conf`)
-* `~/.config/imgoverlay/overlay.conf`
+* `~/.config/imgoverlay/imgoverlay.conf`
 
 ```ini
 socket=/tmp/imgoverlay.socket
