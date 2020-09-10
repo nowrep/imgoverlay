@@ -1,7 +1,7 @@
 bindir_client = join_paths(get_option('prefix'), get_option('bindir'))
 
 qt5 = import('qt5')
-qt5_dep = dependency('qt5', modules: ['Core', 'Widgets', 'WebEngineWidgets'])
+qt5_dep = dependency('qt5', modules: ['Core', 'Network', 'Widgets', 'WebEngineWidgets'])
 
 client_files = files(
   'main.cpp',
