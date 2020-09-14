@@ -148,6 +148,7 @@ struct swapchain_data {
        VkBuffer upload_buffer = 0;
        VkDeviceMemory upload_buffer_mem = 0;
        VkDescriptorSet desc = 0;
+       void *upload_buffer_mem_map = nullptr;
        uint8_t *uploaded_pixels = nullptr;
    };
    std::unordered_map<uint8_t, image_data> images_data;
@@ -533,7 +534,8 @@ static void upload_image_data(struct device_data *device_data,
                               uint32_t height,
                               VkBuffer& upload_buffer,
                               VkDeviceMemory& upload_buffer_mem,
-                              VkImage image)
+                              VkImage image,
+                              void **mem_map = NULL)
 {
    /* Upload buffer */
    if (!upload_buffer) {
@@ -564,18 +566,27 @@ static void upload_image_data(struct device_data *device_data,
    }
 
    /* Upload to Buffer */
-   char* map = NULL;
-   VK_CHECK(device_data->vtable.MapMemory(device_data->device,
-                                          upload_buffer_mem,
-                                          0, upload_size, 0, (void**)(&map)));
+   void *map = NULL;
+   if (!mem_map || *mem_map == NULL) {
+       VK_CHECK(device_data->vtable.MapMemory(device_data->device,
+                                             upload_buffer_mem,
+                                             0, upload_size, 0, &map));
+   }
+   if (mem_map && *mem_map) {
+       map = *mem_map;
+   }
    memcpy(map, pixels, upload_size);
    VkMappedMemoryRange range[1] = {};
    range[0].sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
    range[0].memory = upload_buffer_mem;
    range[0].size = upload_size;
    VK_CHECK(device_data->vtable.FlushMappedMemoryRanges(device_data->device, 1, range));
-   device_data->vtable.UnmapMemory(device_data->device,
-                                   upload_buffer_mem);
+   if (!mem_map) {
+       device_data->vtable.UnmapMemory(device_data->device,
+                                       upload_buffer_mem);
+   } else if (*mem_map == NULL) {
+        *mem_map = map;
+   }
 
    /* Copy buffer to image */
    VkImageMemoryBarrier copy_barrier[1] = {};
@@ -712,6 +723,18 @@ static void ensure_swapchain_fonts(struct swapchain_data *data,
    upload_image_data(device_data, command_buffer, pixels, upload_size, width, height, data->upload_font_buffer, data->upload_font_buffer_mem, data->font_image);
 }
 
+static void destroy_swapchain_image(struct swapchain_data *data, const swapchain_data::image_data &img_data)
+{
+    struct device_data *device_data = data->device;
+    device_data->vtable.UnmapMemory(device_data->device, img_data.upload_buffer_mem);
+    device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &img_data.desc);
+    device_data->vtable.DestroyImageView(device_data->device, img_data.image_view, NULL);
+    device_data->vtable.DestroyImage(device_data->device, img_data.image, NULL);
+    device_data->vtable.FreeMemory(device_data->device, img_data.mem, NULL);
+    device_data->vtable.DestroyBuffer(device_data->device, img_data.upload_buffer, NULL);
+    device_data->vtable.FreeMemory(device_data->device, img_data.upload_buffer_mem, NULL);
+}
+
 static void create_swapchain_images(struct swapchain_data *data)
 {
     struct device_data *device_data = data->device;
@@ -736,13 +759,7 @@ static void create_swapchain_images(struct swapchain_data *data)
         if (images.find(id) != images.end()) {
             continue;
         }
-        const swapchain_data::image_data &img_data = it.second;
-        device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &img_data.desc);
-        device_data->vtable.DestroyImageView(device_data->device, img_data.image_view, NULL);
-        device_data->vtable.DestroyImage(device_data->device, img_data.image, NULL);
-        device_data->vtable.FreeMemory(device_data->device, img_data.mem, NULL);
-        device_data->vtable.DestroyBuffer(device_data->device, img_data.upload_buffer, NULL);
-        device_data->vtable.FreeMemory(device_data->device, img_data.upload_buffer_mem, NULL);
+        destroy_swapchain_image(data, it.second);
         to_erase.push_back(id);
     }
     for (uint8_t id : to_erase) {
@@ -765,7 +782,7 @@ static void ensure_swapchain_images(struct swapchain_data *data,
         }
         img_data.uploaded_pixels = img.pixels;
         VkDeviceSize upload_size = img.width * img.height * 4;
-        upload_image_data(device_data, command_buffer, img.pixels, upload_size, img.width, img.height, img_data.upload_buffer, img_data.upload_buffer_mem, img_data.image);
+        upload_image_data(device_data, command_buffer, img.pixels, upload_size, img.width, img.height, img_data.upload_buffer, img_data.upload_buffer_mem, img_data.image, &img_data.upload_buffer_mem_map);
     }
 }
 
@@ -1394,13 +1411,7 @@ static void shutdown_swapchain_data(struct swapchain_data *data)
    }
 
    for (auto it = data->images_data.cbegin(); it != data->images_data.cend(); ++it) {
-       const swapchain_data::image_data &img_data = it->second;
-       device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &img_data.desc);
-       device_data->vtable.DestroyImageView(device_data->device, img_data.image_view, NULL);
-       device_data->vtable.DestroyImage(device_data->device, img_data.image, NULL);
-       device_data->vtable.FreeMemory(device_data->device, img_data.mem, NULL);
-       device_data->vtable.DestroyBuffer(device_data->device, img_data.upload_buffer, NULL);
-       device_data->vtable.FreeMemory(device_data->device, img_data.upload_buffer_mem, NULL);
+       destroy_swapchain_image(data, it->second);
    }
    data->images_data.clear();
 
