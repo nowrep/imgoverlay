@@ -160,11 +160,7 @@ else
 endif
 
 if dep_vulkan.found()
-  datadir = get_option('datadir')
-  if not datadir.startswith('/')
-    datadir = get_option('prefix') / datadir
-  endif
-  vk_api_xml = files(datadir / 'vulkan/registry/vk.xml')
+  vk_api_xml = files(get_option('vulkan_registry'))
 else
   vkh_sp = subproject('vulkan-headers')
   vk_api_xml = vkh_sp.get_variable('vulkan_api_xml')
