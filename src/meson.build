@@ -28,12 +28,14 @@ vklayer_files = files(
   'control.cpp',
 )
 
-#opengl_files = files(
-#  'gl/glad.c',
-#  'gl/imgui_impl_opengl3.cpp',
+opengl_files = files(
+  'gl/glad.c',
+  'gl/imgui_impl_opengl3.cpp',
 #  'gl/imgui_hud.cpp',
-#  'gl/inject_egl.cpp',
-#)
+  'gl/inject_egl.cpp',
+  'elfhacks.cpp',
+  'real_dlsym.cpp',
+)
 
 #if get_option('with_dlsym').enabled()
 #    pre_args += '-DHOOK_DLSYM'
@@ -47,10 +49,10 @@ if get_option('with_x11').enabled()
     'shared_x11.cpp',
   )
 
-  #  opengl_files += files(
-  #    'loaders/loader_glx.cpp',
-  #    'gl/inject_glx.cpp',
-  #  )
+    opengl_files += files(
+      'loaders/loader_glx.cpp',
+      'gl/inject_glx.cpp',
+    )
 endif
 
 link_args = cc.get_supported_link_arguments(['-Wl,-Bsymbolic-functions', '-Wl,-z,relro', '-Wl,--exclude-libs,ALL'])
@@ -63,7 +65,7 @@ vklayer_mesa_overlay = shared_library(
   util_files,
   vk_enum_to_str,
   vklayer_files,
-  # opengl_files,
+  opengl_files,
   overlay_spv,
   c_args : [
     pre_args,

@@ -63,50 +63,10 @@ EXPORT_C_(void *) glXCreateContext(void *dpy, void *vis, void *shareList, int di
     return ctx;
 }
 
-EXPORT_C_(int) glXMakeCurrent(void* dpy, void* drawable, void* ctx) {
-    glx.Load();
-#ifndef NDEBUG
-    std::cerr << __func__ << ": " << drawable << ", " << ctx << std::endl;
-#endif
-
-    int ret = glx.MakeCurrent(dpy, drawable, ctx);
-
-    if (!is_blacklisted()) {
-        if (ret) {
-            //TODO might as well just ignore everything here as long as VBOs get recreated anyway
-            auto it = std::find(gl_threads.begin(), gl_threads.end(), std::this_thread::get_id());
-            if (!ctx) {
-                if (it != gl_threads.end())
-                    gl_threads.erase(it);
-                if (!gl_threads.size())
-                    imgui_set_context(nullptr);
-            } else {
-                if (it == gl_threads.end())
-                    gl_threads.push_back(std::this_thread::get_id());
-                imgui_set_context(ctx);
-#ifndef NDEBUG
-                std::cerr << "imgoverlay: GL thread count: " << gl_threads.size() << "\n";
-#endif
-            }
-        }
-
-        if (params.gl_vsync >= -1) {
-            if (glx.SwapIntervalEXT)
-                glx.SwapIntervalEXT(dpy, drawable, params.gl_vsync);
-            if (glx.SwapIntervalSGI)
-                glx.SwapIntervalSGI(params.gl_vsync);
-            if (glx.SwapIntervalMESA)
-                glx.SwapIntervalMESA(params.gl_vsync);
-        }
-    }
-
-    return ret;
-}
-
 static void do_imgui_swap(void *dpy, void *drawable)
 {
     if (!is_blacklisted()) {
-        imgui_create(glx.GetCurrentContext());
+        // imgui_create(glx.GetCurrentContext());
 
         unsigned int width = -1, height = -1;
 
@@ -117,7 +77,7 @@ static void do_imgui_swap(void *dpy, void *drawable)
         width = vp[2];
         height = vp[3];*/
 
-        imgui_render(width, height);
+        // imgui_render(width, height);
     }
 }
 
@@ -126,13 +86,6 @@ EXPORT_C_(void) glXSwapBuffers(void* dpy, void* drawable) {
 
     do_imgui_swap(dpy, drawable);
     glx.SwapBuffers(dpy, drawable);
-
-    using namespace std::chrono_literals;
-    if (!is_blacklisted() && fps_limit_stats.targetFrameTime > 0s){
-        fps_limit_stats.frameStart = Clock::now();
-        FpsLimiter(fps_limit_stats);
-        fps_limit_stats.frameEnd = Clock::now();
-    }
 }
 
 EXPORT_C_(int64_t) glXSwapBuffersMscOML(void* dpy, void* drawable, int64_t target_msc, int64_t divisor, int64_t remainder)
@@ -140,73 +93,7 @@ EXPORT_C_(int64_t) glXSwapBuffersMscOML(void* dpy, void* drawable, int64_t targe
     glx.Load();
 
     do_imgui_swap(dpy, drawable);
-    int64_t ret = glx.SwapBuffersMscOML(dpy, drawable, target_msc, divisor, remainder);
-
-    using namespace std::chrono_literals;
-    if (!is_blacklisted() && fps_limit_stats.targetFrameTime > 0s){
-        fps_limit_stats.frameStart = Clock::now();
-        FpsLimiter(fps_limit_stats);
-        fps_limit_stats.frameEnd = Clock::now();
-    }
-    return ret;
-}
-
-EXPORT_C_(void) glXSwapIntervalEXT(void *dpy, void *draw, int interval) {
-#ifndef NDEBUG
-    std::cerr << __func__ << ": " << interval << std::endl;
-#endif
-    glx.Load();
-
-    if (!is_blacklisted() && params.gl_vsync >= 0)
-        interval = params.gl_vsync;
-
-    glx.SwapIntervalEXT(dpy, draw, interval);
-}
-
-EXPORT_C_(int) glXSwapIntervalSGI(int interval) {
-#ifndef NDEBUG
-    std::cerr << __func__ << ": " << interval << std::endl;
-#endif
-    glx.Load();
-
-    if (!is_blacklisted() && params.gl_vsync >= 0)
-        interval = params.gl_vsync;
-
-    return glx.SwapIntervalSGI(interval);
-}
-
-EXPORT_C_(int) glXSwapIntervalMESA(unsigned int interval) {
-#ifndef NDEBUG
-    std::cerr << __func__ << ": " << interval << std::endl;
-#endif
-    glx.Load();
-
-    if (!is_blacklisted() && params.gl_vsync >= 0)
-        interval = (unsigned int)params.gl_vsync;
-
-    return glx.SwapIntervalMESA(interval);
-}
-
-EXPORT_C_(int) glXGetSwapIntervalMESA() {
-    glx.Load();
-    int interval = glx.GetSwapIntervalMESA();
-
-    if (!is_blacklisted()) {
-        static bool first_call = true;
-
-        if (first_call) {
-            first_call = false;
-            if (params.gl_vsync >= 0) {
-                interval = params.gl_vsync;
-                glx.SwapIntervalMESA(interval);
-            }
-        }
-    }
-
-#ifndef NDEBUG
-    std::cerr << __func__ << ": " << interval << std::endl;
-#endif
-    return interval;
+    return glx.SwapBuffersMscOML(dpy, drawable, target_msc, divisor, remainder);
 }
 
 struct func_ptr {
@@ -214,19 +101,13 @@ struct func_ptr {
    void *ptr;
 };
 
-static std::array<const func_ptr, 10> name_to_funcptr_map = {{
+static std::array<const func_ptr, 5> name_to_funcptr_map = {{
 #define ADD_HOOK(fn) { #fn, (void *) fn }
    ADD_HOOK(glXGetProcAddress),
    ADD_HOOK(glXGetProcAddressARB),
    ADD_HOOK(glXCreateContext),
-   ADD_HOOK(glXMakeCurrent),
    ADD_HOOK(glXSwapBuffers),
    ADD_HOOK(glXSwapBuffersMscOML),
-
-   ADD_HOOK(glXSwapIntervalEXT),
-   ADD_HOOK(glXSwapIntervalSGI),
-   ADD_HOOK(glXSwapIntervalMESA),
-   ADD_HOOK(glXGetSwapIntervalMESA),
 #undef ADD_HOOK
 }};
 
