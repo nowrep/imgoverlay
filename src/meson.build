@@ -88,27 +88,27 @@ vklayer_mesa_overlay = shared_library(
   install : true
 )
 
-#imgoverlay_dlsym = shared_library(
-#  'Imgoverlay_dlsym',
-#  files(
-#    'elfhacks.cpp',
-#    'real_dlsym.cpp',
-#    'hook_dlsym.cpp',
-#  ),
-#  c_args : [
-#    pre_args,
-#    no_override_init_args,
-#    ],
-#  cpp_args : [
-#    pre_args,
-#    ],
-#  gnu_symbol_visibility : 'hidden',
-#  dependencies : [dep_dl],
-#  include_directories : [inc_common],
-#  link_args : link_args,
-#  install_dir : libdir_imgoverlay,
-#  install : true
-#)
+imgoverlay_dlsym = shared_library(
+  'Imgoverlay_dlsym',
+  files(
+    'elfhacks.cpp',
+    'real_dlsym.cpp',
+    'hook_dlsym.cpp',
+  ),
+  c_args : [
+    pre_args,
+    no_override_init_args,
+    ],
+  cpp_args : [
+    pre_args,
+    ],
+  gnu_symbol_visibility : 'hidden',
+  dependencies : [dep_dl],
+  include_directories : [inc_common],
+  link_args : link_args,
+  install_dir : libdir_imgoverlay,
+  install : true
+)
 
 configure_file(input : 'imgoverlay.json.in',
   output : '@0@.@1@.json'.format(meson.project_name(), target_machine.cpu_family()),
