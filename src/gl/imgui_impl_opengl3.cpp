@@ -112,7 +112,7 @@ static bool ImGui_ImplOpenGL3_CreateFontsTexture()
     ImGuiIO& io = ImGui::GetIO();
     unsigned char* pixels;
     int width, height;
-    io.Fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
+    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
 
     // Upload texture to graphics system
     GLint last_texture;
@@ -125,7 +125,7 @@ static bool ImGui_ImplOpenGL3_CreateFontsTexture()
     if (g_IsGLES || g_GlVersion >= 200)
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, pixels);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
     // Store our identifier
     io.Fonts->TexID = (ImTextureID)(intptr_t)g_FontTexture;
@@ -264,7 +264,7 @@ static bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
         "out vec4 Out_Color;\n"
         "void main()\n"
         "{\n"
-        "    Out_Color = Frag_Color * vec4(1, 1, 1, texture(Texture, Frag_UV.st).r);\n"
+        "    Out_Color = Frag_Color * texture(Texture, Frag_UV);\n"
         "}\n";
 
     const GLchar* fragment_shader_glsl_300_es =
@@ -275,7 +275,7 @@ static bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
         "layout (location = 0) out vec4 Out_Color;\n"
         "void main()\n"
         "{\n"
-        "    Out_Color = Frag_Color * vec4(1, 1, 1, texture(Texture, Frag_UV.st).r);\n"
+        "    Out_Color = Frag_Color * texture(Texture, Frag_UV);\n"
         "}\n";
 
     const GLchar* fragment_shader_glsl_410_core =
@@ -285,7 +285,7 @@ static bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
         "layout (location = 0) out vec4 Out_Color;\n"
         "void main()\n"
         "{\n"
-        "    Out_Color = Frag_Color * vec4(1, 1, 1, texture(Texture, Frag_UV.st).r);\n"
+        "    Out_Color = Frag_Color * texture(Texture, Frag_UV);\n"
         "}\n";
 
 #ifndef NDEBUG

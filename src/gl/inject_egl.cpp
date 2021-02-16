@@ -60,13 +60,12 @@ EXPORT_C_(unsigned int) eglSwapBuffers( void* dpy, void* surf)
 
         //std::cerr << __func__ << "\n";
 
-        // imgui_create(surf);
+        imgui_create(surf);
 
         int width=0, height=0;
         if (pfn_eglQuerySurface(dpy, surf, 0x3056, &height) &&
             pfn_eglQuerySurface(dpy, surf, 0x3057, &width))
-            ;;
-            // imgui_render(width, height);
+            imgui_render(width, height);
 
         //std::cerr << "\t" << width << " x " << height << "\n";
     }
