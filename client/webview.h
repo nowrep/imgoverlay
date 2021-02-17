@@ -27,6 +27,7 @@ private:
 
     QTimer *m_updateTimer;
     bool m_waitReply = false;
+    bool m_activated = false;
 
     int m_memfd = -1;
     void *m_memory = nullptr;

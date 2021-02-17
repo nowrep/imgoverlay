@@ -76,28 +76,33 @@ WebView::~WebView()
 
 bool WebView::eventFilter(QObject *o, QEvent *e)
 {
-    if (o == focusProxy() && e->type() == QEvent::Paint) {
-        QTimer::singleShot(0, this, [=]() {
-            if (m_waitReply || !m_manager->isConnected()) {
-                m_updateTimer->start();
-                return;
-            }
-            m_updateTimer->stop();
+    if (o == focusProxy()) {
+        if (e->type() == QEvent::WindowActivate) {
+            m_activated = true;
+        }
+        if (m_activated && e->type() == QEvent::Paint) {
+            QTimer::singleShot(0, this, [=]() {
+                if (m_waitReply || !m_manager->isConnected()) {
+                    m_updateTimer->start();
+                    return;
+                }
+                m_updateTimer->stop();
 
-            m_buffer = (m_buffer + 1) % 2;
-            uchar *memory = (uchar*)m_memory + (PIXELS_SIZE(m_conf.width(), m_conf.height()) * m_buffer);
-            QImage img(memory, m_conf.width(), m_conf.height(), QImage::Format_RGBA8888);
-            img.fill(Qt::transparent);
-            render(&img);
+                m_buffer = (m_buffer + 1) % 2;
+                uchar *memory = (uchar*)m_memory + (PIXELS_SIZE(m_conf.width(), m_conf.height()) * m_buffer);
+                QImage img(memory, m_conf.width(), m_conf.height(), QImage::Format_RGBA8888);
+                img.fill(Qt::transparent);
+                render(&img);
 
-            char buf[MSG_BUF_SIZE];
-            msg_struct *msg = (msg_struct*)buf;
-            msg->type = MSG_UPDATE_IMAGE_CONTENTS;
-            msg->update_image_contents.id = m_id;
-            msg->update_image_contents.buffer = m_buffer;
-            m_manager->writeMsg(msg);
-            m_waitReply = true;
-        });
+                char buf[MSG_BUF_SIZE];
+                msg_struct *msg = (msg_struct*)buf;
+                msg->type = MSG_UPDATE_IMAGE_CONTENTS;
+                msg->update_image_contents.id = m_id;
+                msg->update_image_contents.buffer = m_buffer;
+                m_manager->writeMsg(msg);
+                m_waitReply = true;
+            });
+        }
     }
     return QWebEngineView::eventFilter(o, e);
 }
