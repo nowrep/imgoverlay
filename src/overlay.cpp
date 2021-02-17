@@ -469,6 +469,9 @@ void render_imgui(struct swapchain_data *data)
             img_data.uploaded_pixels = nullptr;
             continue;
         }
+        if (!img.pixels) {
+            continue;
+        }
         ImGui::SetNextWindowBgAlpha(0.0);
         ImGui::SetNextWindowPos(ImVec2(img.x, img.y), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(img.width, img.height), ImGuiCond_Always);
