@@ -33,3 +33,11 @@ private:
     uint32_t m_memsize = 0;
     uint32_t m_buffer = 0; // 0 - front, 1 - back
 };
+
+class WebPage : public QWebEnginePage
+{
+    Q_OBJECT
+
+private:
+    void javaScriptConsoleMessage(QWebEnginePage::JavaScriptConsoleMessageLevel level, const QString &message, int lineNumber, const QString &sourceID);
+};

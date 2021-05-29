@@ -12,6 +12,8 @@ WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget 
     , m_conf(conf)
     , m_manager(manager)
 {
+    setPage(new WebPage);
+
     page()->setBackgroundColor(Qt::transparent);
     setAttribute(Qt::WA_TranslucentBackground, true);
     setMinimumSize(m_conf.width(), m_conf.height());
@@ -141,4 +143,12 @@ void WebView::initMemory()
 
     fcntl(m_memfd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW);
     fcntl(m_memfd, F_ADD_SEALS, F_SEAL_SEAL);
+}
+
+void WebPage::javaScriptConsoleMessage(QWebEnginePage::JavaScriptConsoleMessageLevel level, const QString &message, int lineNumber, const QString &sourceID)
+{
+    Q_UNUSED(level)
+    Q_UNUSED(message)
+    Q_UNUSED(lineNumber)
+    Q_UNUSED(sourceID)
 }
