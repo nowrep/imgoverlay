@@ -5,6 +5,7 @@
 #include <QPaintEvent>
 #include <QVBoxLayout>
 #include <QDialog>
+#include <QMenu>
 
 WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget *parent)
     : QWebEngineView(parent)
@@ -104,12 +105,32 @@ bool WebView::eventFilter(QObject *o, QEvent *e)
     return QWebEngineView::eventFilter(o, e);
 }
 
+void WebView::contextMenuEvent(QContextMenuEvent *event)
+{
+    QMenu menu;
+    menu.addAction(pageAction(QWebEnginePage::Back));
+    menu.addAction(pageAction(QWebEnginePage::Forward));
+    menu.addAction(pageAction(QWebEnginePage::Reload));
+    menu.addSeparator();
+    menu.addAction(pageAction(QWebEnginePage::ViewSource));
+    menu.addAction(tr("Inspect"), this, [=]() {
+        if (page()->devToolsPage()) {
+            triggerPageAction(QWebEnginePage::InspectElement);
+        } else {
+            QWebEngineView *view = createWindow(QWebEnginePage::WebDialog);
+            view->page()->setInspectedPage(page());
+        }
+    });
+    menu.exec(event->globalPos());
+}
+
 QWebEngineView *WebView::createWindow(QWebEnginePage::WebWindowType)
 {
     QWebEngineView *view = new QWebEngineView;
     QVBoxLayout *layout = new QVBoxLayout;
     layout->addWidget(view);
     QDialog *dialog = new QDialog(parentWidget());
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setLayout(layout);
     dialog->resize(parentWidget()->width() * 0.8, parentWidget()->height() * 0.8);
     dialog->show();

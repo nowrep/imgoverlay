@@ -17,6 +17,7 @@ public:
 
 private:
     bool eventFilter(QObject *o, QEvent *e) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
     QWebEngineView *createWindow(QWebEnginePage::WebWindowType) override;
 
     void initMemory();
