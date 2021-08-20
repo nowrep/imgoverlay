@@ -75,7 +75,8 @@ struct device_data {
    VkPhysicalDevice physical_device;
    VkDevice device;
 
-   VkPhysicalDeviceProperties properties;
+   VkPhysicalDeviceProperties2 properties;
+   VkPhysicalDeviceExternalMemoryHostPropertiesEXT external_memory_properties;
 
    struct queue_data *graphic_queue;
 
@@ -540,22 +541,51 @@ static void upload_image_data(struct device_data *device_data,
                               VkImage image,
                               void **mem_map = NULL)
 {
+   const VkDeviceSize align = device_data->external_memory_properties.minImportedHostPointerAlignment;
+   VkDeviceSize import_offset = (uintptr_t)pixels % align;
+   void *import_ptr = (uint8_t*)pixels - import_offset;
+   VkDeviceSize import_size = upload_size + import_offset;
+   if (import_size % align) {
+      import_size += align - (import_size % align);
+   }
+
    /* Upload buffer */
    if (!upload_buffer) {
+       VkExternalMemoryBufferCreateInfoKHR ext_buffer_info = {};
+       ext_buffer_info.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR,
+       ext_buffer_info.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+
        VkBufferCreateInfo buffer_info = {};
        buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-       buffer_info.size = upload_size;
+       buffer_info.pNext = &ext_buffer_info;
+       buffer_info.size = import_size;
        buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
        buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
        VK_CHECK(device_data->vtable.CreateBuffer(device_data->device, &buffer_info,
                                                  NULL, &upload_buffer));
+
        VkMemoryRequirements upload_buffer_req;
        device_data->vtable.GetBufferMemoryRequirements(device_data->device,
                                                        upload_buffer,
                                                        &upload_buffer_req);
+
+       VkMemoryHostPointerPropertiesEXT host_pointer_props = {};
+       host_pointer_props.sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT;
+       VK_CHECK(device_data->vtable.GetMemoryHostPointerPropertiesEXT(device_data->device,
+                                                             VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+                                                             import_ptr,
+                                                             &host_pointer_props));
+       upload_buffer_req.memoryTypeBits &= host_pointer_props.memoryTypeBits;
+
+       VkImportMemoryHostPointerInfoEXT import_host_pointer_info = {};
+       import_host_pointer_info.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT;
+       import_host_pointer_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+       import_host_pointer_info.pHostPointer = import_ptr;
+
        VkMemoryAllocateInfo upload_alloc_info = {};
        upload_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-       upload_alloc_info.allocationSize = upload_buffer_req.size;
+       upload_alloc_info.pNext = &import_host_pointer_info;
+       upload_alloc_info.allocationSize = import_size;
        upload_alloc_info.memoryTypeIndex = vk_memory_type(device_data,
                                                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
                                                           upload_buffer_req.memoryTypeBits);
@@ -568,6 +598,7 @@ static void upload_image_data(struct device_data *device_data,
                                                      upload_buffer_mem, 0));
    }
 
+#if 0
    /* Upload to Buffer */
    void *map = NULL;
    if (!mem_map || *mem_map == NULL) {
@@ -590,6 +621,7 @@ static void upload_image_data(struct device_data *device_data,
    } else if (*mem_map == NULL) {
         *mem_map = map;
    }
+#endif
 
    /* Copy buffer to image */
    VkImageMemoryBarrier copy_barrier[1] = {};
@@ -615,6 +647,8 @@ static void upload_image_data(struct device_data *device_data,
    region.imageExtent.width = width;
    region.imageExtent.height = height;
    region.imageExtent.depth = 1;
+   region.bufferOffset = import_offset;
+   std::cout << "copy with offset " << region.bufferOffset << std::endl;
    device_data->vtable.CmdCopyBufferToImage(command_buffer,
                                             upload_buffer,
                                             image,
@@ -723,7 +757,7 @@ static void ensure_swapchain_fonts(struct swapchain_data *data,
    int width, height;
    io.Fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
    size_t upload_size = width * height * 1 * sizeof(char);
-   upload_image_data(device_data, command_buffer, pixels, upload_size, width, height, data->upload_font_buffer, data->upload_font_buffer_mem, data->font_image);
+   // upload_image_data(device_data, command_buffer, pixels, upload_size, width, height, data->upload_font_buffer, data->upload_font_buffer_mem, data->font_image);
 }
 
 static void destroy_swapchain_image(struct swapchain_data *data, const swapchain_data::image_data &img_data)
@@ -1550,6 +1584,30 @@ static VkResult overlay_CreateDevice(
    assert(chain_info->u.pLayerInfo);
    PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = chain_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;
    PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr = chain_info->u.pLayerInfo->pfnNextGetDeviceProcAddr;
+
+   bool add_mem_host_ext = true;
+   for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; ++i) {
+       if (!strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME)) {
+           add_mem_host_ext = false;
+       }
+   }
+   int add_count = 0;
+   if (add_mem_host_ext) {
+       add_count++;
+       std::cout << "Injecting " << VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME << "extension" << std::endl;
+   }
+   if (add_count) {
+       int new_count = pCreateInfo->enabledExtensionCount + add_count;
+       const char **exts = (const char**)malloc(sizeof(char*) * new_count);
+       memcpy(exts, pCreateInfo->ppEnabledExtensionNames, sizeof(char*) * pCreateInfo->enabledExtensionCount);
+       if (add_mem_host_ext) {
+           exts[new_count - add_count--] = VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME;
+       }
+       VkDeviceCreateInfo *i = (VkDeviceCreateInfo*)pCreateInfo;
+       i->enabledExtensionCount = new_count;
+       i->ppEnabledExtensionNames = exts;
+   }
+
    PFN_vkCreateDevice fpCreateDevice = (PFN_vkCreateDevice)fpGetInstanceProcAddr(NULL, "vkCreateDevice");
    if (fpCreateDevice == NULL) {
       return VK_ERROR_INITIALIZATION_FAILED;
@@ -1565,7 +1623,10 @@ static VkResult overlay_CreateDevice(
    device_data->physical_device = physicalDevice;
    vk_load_device_commands(*pDevice, fpGetDeviceProcAddr, &device_data->vtable);
 
-   instance_data->vtable.GetPhysicalDeviceProperties(device_data->physical_device,
+   device_data->properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+   device_data->properties.pNext = &device_data->external_memory_properties;
+   device_data->external_memory_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT;
+   instance_data->vtable.GetPhysicalDeviceProperties2(device_data->physical_device,
                                                      &device_data->properties);
 
    VkLayerDeviceCreateInfo *load_data_info =
