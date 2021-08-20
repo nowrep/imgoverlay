@@ -46,6 +46,7 @@ WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget 
         m_manager->writeMsg(msg);
         m_manager->writeFd(m_memfd);
         m_waitReply = true;
+        m_buffer = 0;
     });
 
     connect(m_manager, &Manager::socketDisconnected, this, [this]() {
@@ -87,8 +88,9 @@ bool WebView::eventFilter(QObject *o, QEvent *e)
             }
             m_updateTimer->stop();
 
+            uint8_t buffer = m_buffer;
             m_buffer = (m_buffer + 1) % 2;
-            uchar *memory = (uchar*)m_memory + (PIXELS_SIZE(m_conf.width(), m_conf.height()) * m_buffer);
+            uchar *memory = (uchar*)m_memory + (PIXELS_SIZE(m_conf.width(), m_conf.height()) * buffer);
             QImage img(memory, m_conf.width(), m_conf.height(), QImage::Format_RGBA8888);
             img.fill(Qt::transparent);
             render(&img);
@@ -97,7 +99,7 @@ bool WebView::eventFilter(QObject *o, QEvent *e)
             msg_struct *msg = (msg_struct*)buf;
             msg->type = MSG_UPDATE_IMAGE_CONTENTS;
             msg->update_image_contents.id = m_id;
-            msg->update_image_contents.buffer = m_buffer;
+            msg->update_image_contents.buffer = buffer;
             m_manager->writeMsg(msg);
             m_waitReply = true;
         });
