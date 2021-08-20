@@ -14,6 +14,7 @@
 #include <QSystemTrayIcon>
 #include <QLabel>
 #include <QFileInfo>
+#include <QMenu>
 
 Manager::Manager(const QString &confFile, bool tray, QObject *parent)
     : QObject(parent)
@@ -82,6 +83,9 @@ Manager::Manager(const QString &confFile, bool tray, QObject *parent)
             m_window->show();
         }
     });
+    QMenu *menu = new QMenu();
+    menu->addAction(QStringLiteral("Exit"), qApp, &QApplication::quit);
+    m_tray->setContextMenu(menu);
 
     initWebViews();
     updateStatus();
