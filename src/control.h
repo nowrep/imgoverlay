@@ -13,10 +13,20 @@ struct OverlayImage
     int width = 0;
     int height = 0;
     bool visible = false;
+    bool dmabuf = false;
+    bool flip = false;
+    // shmem
     uint8_t *pixels = nullptr;
     int memfd = -1;
     void *memory = nullptr;
     size_t memsize = 0;
+    // dmabuf
+    int format = 0;
+    uint64_t modifier = 0;
+    int strides[4] = {0};
+    int offsets[4] = {0};
+    int dmabufs[4] = {-1};
+    int nfd = 0;
 };
 
 class Control

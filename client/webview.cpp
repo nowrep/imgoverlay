@@ -7,6 +7,25 @@
 #include <QDialog>
 #include <QMenu>
 
+#include <QQuickWidget>
+#include <QOpenGLContext>
+#include <QOpenGLFunctions>
+#include <QOpenGLFramebufferObject>
+
+#define EGL_NO_X11
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+
+static bool checkDmaBufSupport(QOpenGLContext *ctx)
+{
+    if (!ctx || !ctx->functions()) {
+        return false;
+    }
+    // Just check if not NVIDIA ...
+    const QString vendor(reinterpret_cast<const char *>(ctx->functions()->glGetString(GL_VENDOR)));
+    return vendor.indexOf(QLatin1String("NVIDIA"), Qt::CaseInsensitive) == -1;
+}
+
 WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget *parent)
     : QWebEngineView(parent)
     , m_id(id)
@@ -20,45 +39,26 @@ WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget 
     setMinimumSize(m_conf.width(), m_conf.height());
     setMaximumSize(m_conf.width(), m_conf.height());
     load(m_conf.url());
-    focusProxy()->installEventFilter(this);
 
-    initMemory();
-
-    m_updateTimer = new QTimer(this);
-    m_updateTimer->setSingleShot(true);
-    m_updateTimer->setInterval(200);
-    connect(m_updateTimer, &QTimer::timeout, this, [this]() {
-        focusProxy()->update();
-    });
-
-    connect(m_manager, &Manager::socketConnected, this, [this]() {
-        char buf[MSG_BUF_SIZE];
-        memset(buf, 0, MSG_BUF_SIZE);
-        msg_struct *msg = (msg_struct*)buf;
-        msg->type = MSG_CREATE_IMAGE;
-        msg->create_image.id = m_id;
-        msg->create_image.x = m_conf.x();
-        msg->create_image.y = m_conf.y();
-        msg->create_image.width = m_conf.width();
-        msg->create_image.height = m_conf.height();
-        msg->create_image.visible = 1;
-        msg->create_image.memsize = m_memsize;
-        m_manager->writeMsg(msg);
-        m_manager->writeFd(m_memfd);
-        m_waitReply = true;
-        m_buffer = 0;
-    });
-
-    connect(m_manager, &Manager::socketDisconnected, this, [this]() {
-        m_waitReply = false;
-    });
-
-    connect(m_manager, &Manager::replyReceived, this, [this](struct reply_struct *reply) {
-        if (reply->id != m_id) {
-            return;
-        }
-        m_waitReply = false;
-    });
+    QQuickWidget *w = qobject_cast<QQuickWidget*>(focusProxy());
+    if (w && w->quickWindow()) {
+        QQuickWindow *window = w->quickWindow();
+        connect(window, &QQuickWindow::sceneGraphInitialized, this, [=]() {
+            if (checkDmaBufSupport(window->openglContext())) {
+                qDebug() << "Using DMA-BUF";
+                connect(w->quickWindow(), &QQuickWindow::afterRendering, this, &WebView::initDmaBuf, Qt::DirectConnection);
+                connect(m_manager, &Manager::socketConnected, this, [this]() {
+                    if (m_fbo) {
+                        sendCreateImage();
+                    }
+                });
+            } else {
+                initShm();
+            }
+        });
+    } else {
+        initShm();
+    }
 
     connect(this, &WebView::loadFinished, this, [this](bool ok) {
         if (!ok || m_conf.injectScript().isEmpty()) {
@@ -76,6 +76,7 @@ WebView::~WebView()
     if (m_memfd >= 0) {
         ::close(m_memfd);
     }
+
 }
 
 bool WebView::eventFilter(QObject *o, QEvent *e)
@@ -139,6 +140,38 @@ QWebEngineView *WebView::createWindow(QWebEnginePage::WebWindowType)
     return view;
 }
 
+void WebView::initShm()
+{
+    qDebug() << "Using SHM";
+
+    initMemory();
+    focusProxy()->installEventFilter(this);
+
+    m_updateTimer = new QTimer(this);
+    m_updateTimer->setSingleShot(true);
+    m_updateTimer->setInterval(200);
+    connect(m_updateTimer, &QTimer::timeout, this, [this]() {
+        focusProxy()->update();
+    });
+
+    connect(m_manager, &Manager::socketConnected, this, [this]() {
+        sendCreateImage();
+        m_waitReply = true;
+        m_buffer = 0;
+    });
+
+    connect(m_manager, &Manager::socketDisconnected, this, [this]() {
+        m_waitReply = false;
+    });
+
+    connect(m_manager, &Manager::replyReceived, this, [this](struct reply_struct *reply) {
+        if (reply->id != m_id) {
+            return;
+        }
+        m_waitReply = false;
+    });
+}
+
 void WebView::initMemory()
 {
     m_memsize = PIXELS_SIZE(m_conf.width(), m_conf.height()) * 2;
@@ -166,6 +199,81 @@ void WebView::initMemory()
 
     fcntl(m_memfd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW);
     fcntl(m_memfd, F_ADD_SEALS, F_SEAL_SEAL);
+}
+
+void WebView::initDmaBuf()
+{
+    QQuickWindow *w = qobject_cast<QQuickWindow*>(sender());
+    if (!w || !w->renderTarget()) {
+        return;
+    }
+
+    EGLDisplay dpy = eglGetCurrentDisplay();
+    m_eglImage = eglCreateImage(dpy, eglGetCurrentContext(), EGL_GL_TEXTURE_2D, reinterpret_cast<EGLClientBuffer>(w->renderTarget()->texture()), NULL);
+    if (!m_eglImage) {
+        qCritical() << "Failed to create EGL image";
+        return;
+    }
+
+    PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC eglExportDMABUFImageQueryMESA =
+        (PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC) eglGetProcAddress("eglExportDMABUFImageQueryMESA");
+    PFNEGLEXPORTDMABUFIMAGEMESAPROC eglExportDMABUFImageMESA =
+        (PFNEGLEXPORTDMABUFIMAGEMESAPROC) eglGetProcAddress("eglExportDMABUFImageMESA");
+
+    if (!eglExportDMABUFImageQueryMESA || !eglExportDMABUFImageMESA) {
+        qCritical() << "Failed to resolve EGL functions";
+        return;
+    }
+
+    if (!eglExportDMABUFImageQueryMESA(dpy, m_eglImage, &m_format, &m_nfd, &m_modifier)) {
+        qCritical() << "Failed to query DMABUF export";
+        return;
+    }
+    if (!eglExportDMABUFImageMESA(dpy, m_eglImage, m_dmabufs, m_strides, m_offsets)) {
+        qCritical() << "Failed DMABUF export";
+        return;
+    }
+
+    m_fbo = w->renderTarget();
+    disconnect(w, &QQuickWindow::afterRendering, this, &WebView::initDmaBuf);
+    QMetaObject::invokeMethod(this, [this]() {
+        if (m_manager->isConnected()) {
+            sendCreateImage();
+        }
+    }, Qt::QueuedConnection);
+
+}
+
+void WebView::sendCreateImage()
+{
+    char buf[MSG_BUF_SIZE];
+    memset(buf, 0, MSG_BUF_SIZE);
+    msg_struct *msg = (msg_struct*)buf;
+    msg->type = MSG_CREATE_IMAGE;
+    msg->create_image.id = m_id;
+    msg->create_image.x = m_conf.x();
+    msg->create_image.y = m_conf.y();
+    msg->create_image.width = m_conf.width();
+    msg->create_image.height = m_conf.height();
+    msg->create_image.visible = 1;
+    msg->create_image.memsize = m_memsize;
+    msg->create_image.format = m_format;
+    msg->create_image.modifier = m_modifier;
+    memcpy(msg->create_image.strides, m_strides, sizeof(m_strides));
+    memcpy(msg->create_image.offsets, m_offsets, sizeof(m_offsets));
+
+    int *fds = nullptr;
+    if (m_memfd > 0) {
+        msg->create_image.nfd = 1;
+        msg->create_image.flip = 0;
+        fds = &m_memfd;
+    } else {
+        msg->create_image.nfd = m_nfd;
+        msg->create_image.flip = 1;
+        fds = m_dmabufs;
+    }
+    m_manager->writeMsg(msg);
+    m_manager->writeFds(fds, msg->create_image.nfd);
 }
 
 void WebPage::javaScriptConsoleMessage(QWebEnginePage::JavaScriptConsoleMessageLevel level, const QString &message, int lineNumber, const QString &sourceID)

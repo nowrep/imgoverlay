@@ -6,6 +6,8 @@
 
 int main(int argc, char *argv[])
 {
+    qputenv("QT_XCB_GL_INTEGRATION", "xcb_egl");
+
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("Imgoverlay Client"));
     app.setApplicationVersion(QStringLiteral(IMGOVERLAY_VERSION));

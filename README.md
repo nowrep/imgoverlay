@@ -10,7 +10,8 @@ Started as [MangoHud](https://github.com/flightlessmango/MangoHud) fork.
 * glslangValidator
 * python3
 * Xlib
-* Qt5 - Core, Network, Widgets WebEngineWidgets
+* Qt5 - Core, Network, Widgets, WebEngineWidgets, QuickWidgets
+* EGL
 
 #### Build
 ```sh

@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <linux/memfd.h>
 
-#define MSG_BUF_SIZE 32
+#define MSG_BUF_SIZE 128 // XXX
 #define REPLY_BUF_SIZE 16
 #define PIXELS_SIZE(w, h) ((w) * (h) * sizeof(uint32_t))
 
@@ -32,7 +32,15 @@ struct msg_create_image {
     uint32_t width;
     uint32_t height;
     uint8_t visible;
+    uint8_t flip;
+    uint8_t nfd;
+    // shmem
     uint32_t memsize;
+    // dmabuf
+    int32_t format;
+    uint64_t modifier;
+    int32_t strides[4];
+    int32_t offsets[4];
 };
 
 struct msg_update_image {

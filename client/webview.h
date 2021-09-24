@@ -6,6 +6,7 @@
 #include <QWebEngineView>
 
 class QTimer;
+class QOpenGLFramebufferObject;
 
 class WebView : public QWebEngineView
 {
@@ -20,7 +21,10 @@ private:
     void contextMenuEvent(QContextMenuEvent *event) override;
     QWebEngineView *createWindow(QWebEnginePage::WebWindowType) override;
 
+    void initShm();
     void initMemory();
+    void initDmaBuf();
+    void sendCreateImage();
 
     uint8_t m_id = 0;
     GroupConfig m_conf;
@@ -33,6 +37,15 @@ private:
     void *m_memory = nullptr;
     uint32_t m_memsize = 0;
     uint32_t m_buffer = 0; // 0 - front, 1 - back
+
+    int m_dmabufs[4] = {-1};
+    int32_t m_format = 0;
+    int32_t m_strides[4] = {0};
+    int32_t m_offsets[4] = {0};
+    uint64_t m_modifier = 0;
+    int m_nfd = 0;
+    void *m_eglImage = nullptr;
+    QOpenGLFramebufferObject *m_fbo = nullptr;
 };
 
 class WebPage : public QWebEnginePage

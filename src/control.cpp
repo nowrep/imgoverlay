@@ -32,14 +32,13 @@ const std::unordered_map<uint8_t, OverlayImage> &Control::images() const
 }
 
 // https://github.com/a-darwish/memfd-examples
-static int receive_fd(int socket)
+static int receive_fds(int socket, int fds[4])
 {
     struct msghdr msgh;
     struct iovec iov;
     union {
         struct cmsghdr cmsgh;
-        // Space large enough to hold an 'int' */
-        char control[CMSG_SPACE(sizeof(int))];
+        char control[CMSG_SPACE(sizeof(int)) * 4];
     } control_un;
     struct cmsghdr *cmsgh;
 
@@ -54,7 +53,7 @@ static int receive_fd(int socket)
     msgh.msg_iov = &iov;
     msgh.msg_iovlen = 1;
     msgh.msg_control = control_un.control;
-    msgh.msg_controllen = sizeof(control_un.control);
+    msgh.msg_controllen =  sizeof(control_un.control);
 
     int size = recvmsg(socket, &msgh, 0);
     if (size == -1) {
@@ -85,7 +84,12 @@ static int receive_fd(int socket)
         return -5;
     }
 
-    return *((int *) CMSG_DATA(cmsgh));
+    const size_t nfd = (cmsgh->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
+    memset(fds, -1, sizeof(int) * 4);
+    for (size_t i = 0; i < nfd; ++i) {
+        fds[i] = ((int*)CMSG_DATA(cmsgh))[i];
+    }
+    return 0;
 }
 
 void Control::processSocket()
@@ -119,8 +123,9 @@ void Control::processSocket()
         // Get memfd
         if (m_waitingForFd) {
             m_waitingForFd = false;
-            int fd = receive_fd(m_client);
-            if (fd == -1) {
+            int fds[4];
+            int ret = receive_fds(m_client, fds);
+            if (ret == -1) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     m_waitingForFd = true;
                     return;
@@ -130,18 +135,24 @@ void Control::processSocket()
 #endif
                 closeClient();
                 return;
-            } else if (fd < 0) {
-                std::cerr << "Error receiving fd " << fd << std::endl;
+            } else if (ret < 0) {
+                std::cerr << "Error receiving fd " << ret << std::endl;
                 closeClient();
                 return;
             }
             OverlayImage img = m_images.at(m_waitingId);
-            img.memfd = fd;
-            img.memory = mmap(NULL, img.memsize, PROT_READ, MAP_PRIVATE, img.memfd, 0);
-            if (img.memory == MAP_FAILED) {
-                std::cerr << "mmap error: " << strerror(errno) << std::endl;
-                closeClient();
-                return;
+            if (img.memsize) {
+                img.memfd = fds[0];
+                img.memory = mmap(NULL, img.memsize, PROT_READ, MAP_PRIVATE, img.memfd, 0);
+                if (img.memory == MAP_FAILED) {
+                    std::cerr << "mmap error: " << strerror(errno) << std::endl;
+                    closeClient();
+                    return;
+                }
+            } else {
+                for (int i = 0; i < img.nfd; ++i) {
+                    img.dmabufs[i] = fds[i];
+                }
             }
             m_images[m_waitingId] = img;
         }
@@ -218,7 +229,7 @@ void Control::processCreateImageMsg(struct msg_struct *msg, struct reply_struct 
         return;
     }
 
-    if (m->memsize > MAX_MEM_SIZE || m->memsize != (PIXELS_SIZE(m->width, m->height) * 2)) {
+    if (m->memsize > 0 && (m->memsize > MAX_MEM_SIZE || m->memsize != (PIXELS_SIZE(m->width, m->height) * 2))) {
         std::cerr << "Invalid memsize: " << m->memsize << std::endl;
         reply->status = STATUS_ERROR;
         return;
@@ -247,7 +258,14 @@ void Control::processCreateImageMsg(struct msg_struct *msg, struct reply_struct 
     img.width = m->width;
     img.height = m->height;
     img.visible = m->visible == 1;
+    img.flip = m->flip;
+    img.dmabuf = m->memsize == 0;
     img.memsize = m->memsize;
+    img.format = m->format;
+    img.modifier = m->modifier;
+    memcpy(img.strides, m->strides, sizeof(m->strides));
+    memcpy(img.offsets, m->offsets, sizeof(m->offsets));
+    img.nfd = m->nfd;
     m_images.insert({m->id, img});
 
     m_waitingId = m->id;
@@ -373,6 +391,11 @@ void Control::destroyImage(OverlayImage &img)
     if (img.memfd >= 0) {
         close(img.memfd);
         img.memfd = -1;
+    }
+    if (img.dmabuf) {
+        for (int i = 0; i < img.nfd; ++i) {
+            close(img.dmabufs[i]);
+        }
     }
 }
 

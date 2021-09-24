@@ -102,7 +102,7 @@ bool Manager::isConnected() const
     return m_socket->state() == QLocalSocket::ConnectedState;
 }
 
-bool Manager::writeFd(int fd)
+bool Manager::writeFds(int fds[4], int nfd)
 {
     if (!isConnected()) {
         qWarning() << "Not connected";
@@ -113,14 +113,8 @@ bool Manager::writeFd(int fd)
     struct iovec iov;
     union {
         struct cmsghdr cmsgh;
-        // Space large enough to hold an 'int'
-        char   control[CMSG_SPACE(sizeof(int))];
+        char   control[CMSG_SPACE(sizeof(int) * 4)];
     } control_un;
-
-    if (fd < 0) {
-        qWarning() << "Cannot pass an invalid fd" << fd;
-        return false;
-    }
 
     // We must transmit at least 1 byte of real data in order
     // to send some other ancillary data.
@@ -133,13 +127,13 @@ bool Manager::writeFd(int fd)
     msgh.msg_iov = &iov;
     msgh.msg_iovlen = 1;
     msgh.msg_control = control_un.control;
-    msgh.msg_controllen = sizeof(control_un.control);
+    msgh.msg_controllen = CMSG_SPACE(sizeof(int)) * nfd;
 
     // Write the fd as ancillary data
-    control_un.cmsgh.cmsg_len = CMSG_LEN(sizeof(int));
+    control_un.cmsgh.cmsg_len = CMSG_LEN(sizeof(int)) * nfd;
     control_un.cmsgh.cmsg_level = SOL_SOCKET;
     control_un.cmsgh.cmsg_type = SCM_RIGHTS;
-    *((int *) CMSG_DATA(CMSG_FIRSTHDR(&msgh))) = fd;
+    memcpy(CMSG_DATA(CMSG_FIRSTHDR(&msgh)), fds, sizeof(int) * nfd);
 
     int size = sendmsg(m_socket->socketDescriptor(), &msgh, 0);
     if (size < 0) {

@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <fcntl.h>
 #include <thread>
 #include <chrono>
 #include <unordered_map>
@@ -55,7 +56,7 @@
 #include "version.h"
 #include "control.h"
 
-bool open = false;
+static bool _open = false;
 
 /* Mapped from VkInstace/VkPhysicalDevice */
 struct instance_data {
@@ -469,7 +470,7 @@ void render_imgui(struct swapchain_data *data)
             img_data.uploaded_pixels = nullptr;
             continue;
         }
-        if (!img.pixels) {
+        if (!img.dmabuf && !img.pixels) {
             continue;
         }
         ImGui::SetNextWindowBgAlpha(0.0);
@@ -477,8 +478,12 @@ void render_imgui(struct swapchain_data *data)
         ImGui::SetNextWindowSize(ImVec2(img.width, img.height), ImGuiCond_Always);
         char name[4];
         snprintf(name, 4, "%u", (unsigned)id);
-        ImGui::Begin(name, &open, ImGuiWindowFlags_NoDecoration);
-        ImGui::Image(img_data.desc, ImVec2(img.width, img.height));
+        ImGui::Begin(name, &_open, ImGuiWindowFlags_NoDecoration);
+        if (img.flip) {
+            ImGui::Image(img_data.desc, ImVec2(img.width, img.height), ImVec2(0, 1), ImVec2(1, 0));
+        } else {
+            ImGui::Image(img_data.desc, ImVec2(img.width, img.height));
+        }
         ImGui::End();
     }
 
@@ -642,6 +647,130 @@ static void upload_image_data(struct device_data *device_data,
                                           1, use_barrier);
 }
 
+static VkDescriptorSet import_dmabuf_with_desc(struct swapchain_data *data,
+                                               uint32_t width,
+                                               uint32_t height,
+                                               int format,
+                                               uint64_t modifier,
+                                               const int strides[4],
+                                               const int offsets[4],
+                                               const int fds[4],
+                                               int nfd,
+                                               VkImage& image,
+                                               VkDeviceMemory& image_mem,
+                                               VkImageView& image_view)
+{
+    struct device_data *device_data = data->device;
+
+    VkImageCreateInfo image_info = {};
+    image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image_info.imageType = VK_IMAGE_TYPE_2D;
+    image_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+    image_info.extent.width = width;
+    image_info.extent.height = height;
+    image_info.extent.depth = 1;
+    image_info.mipLevels = 1;
+    image_info.arrayLayers = 1;
+    image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+    image_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image_info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+
+    VkExternalMemoryImageCreateInfo eimg = {};
+    eimg.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+    eimg.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+    image_info.pNext = &eimg;
+
+    VkSubresourceLayout layouts[4] = {};
+    for (int i = 0; i < nfd; ++i) {
+        layouts[i].offset = offsets[i];
+        layouts[i].rowPitch = strides[i];
+    }
+    VkImageDrmFormatModifierExplicitCreateInfoEXT modifier_info = {};
+    modifier_info.sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT;
+    modifier_info.drmFormatModifier = modifier;
+    modifier_info.drmFormatModifierPlaneCount = nfd;
+    modifier_info.pPlaneLayouts = layouts;
+    eimg.pNext = &modifier_info;
+
+    VK_CHECK(device_data->vtable.CreateImage(device_data->device, &image_info,
+                                             NULL, &image));
+
+    // Alloc import
+    VkMemoryFdPropertiesKHR fdp = {};
+    fdp.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
+    VK_CHECK(device_data->vtable.GetMemoryFdPropertiesKHR(device_data->device,
+                                                          VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+                                                          fds[0], &fdp));
+
+    VkImageMemoryRequirementsInfo2 memri = {};
+    memri.image = image;
+    memri.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+
+    VkMemoryRequirements2 image_req = {};
+    image_req.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+    device_data->vtable.GetImageMemoryRequirements2(device_data->device, &memri, &image_req);
+
+    VkMemoryAllocateInfo image_alloc_info = {};
+    image_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    image_alloc_info.allocationSize = image_req.memoryRequirements.size;
+    image_alloc_info.memoryTypeIndex = vk_memory_type(device_data,
+                                                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                                      image_req.memoryRequirements.memoryTypeBits);
+
+    VkImportMemoryFdInfoKHR importi = {};
+    importi.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+    importi.fd = fcntl(fds[0], F_DUPFD_CLOEXEC, 0);
+    importi.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+    image_alloc_info.pNext = &importi;
+
+    VkMemoryDedicatedAllocateInfo dedi = {};
+    dedi.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+    dedi.image = image;
+    importi.pNext = &dedi;
+
+    VK_CHECK(device_data->vtable.AllocateMemory(device_data->device,
+                                                &image_alloc_info,
+                                                NULL, &image_mem));
+
+
+    VkBindImageMemoryInfo bind_info = {};
+    bind_info.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
+    bind_info.image = image;
+    bind_info.memory = image_mem;
+    bind_info.memoryOffset = 0;
+
+    VK_CHECK(device_data->vtable.BindImageMemory2(device_data->device,
+                                                  1, &bind_info));
+
+    // View
+    VkImageViewCreateInfo view_info = {};
+    view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view_info.image = image;
+    view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view_info.format = image_info.format;
+    view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view_info.subresourceRange.levelCount = 1;
+    view_info.subresourceRange.layerCount = 1;
+    VK_CHECK(device_data->vtable.CreateImageView(device_data->device, &view_info,
+                                                 NULL, &image_view));
+
+    VkDescriptorSet descriptor_set;
+
+    VkDescriptorSetAllocateInfo alloc_info = {};
+    alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    alloc_info.descriptorPool = data->descriptor_pool;
+    alloc_info.descriptorSetCount = 1;
+    alloc_info.pSetLayouts = &data->descriptor_layout;
+    VK_CHECK(device_data->vtable.AllocateDescriptorSets(device_data->device,
+                                                        &alloc_info,
+                                                        &descriptor_set));
+
+    update_image_descriptor(data, image_view, descriptor_set);
+    return descriptor_set;
+}
+
 static VkDescriptorSet create_image_with_desc(struct swapchain_data *data,
                                           uint32_t width,
                                           uint32_t height,
@@ -729,13 +858,17 @@ static void ensure_swapchain_fonts(struct swapchain_data *data,
 static void destroy_swapchain_image(struct swapchain_data *data, const swapchain_data::image_data &img_data)
 {
     struct device_data *device_data = data->device;
-    device_data->vtable.UnmapMemory(device_data->device, img_data.upload_buffer_mem);
+    if (img_data.upload_buffer_mem) {
+        device_data->vtable.UnmapMemory(device_data->device, img_data.upload_buffer_mem);
+    }
     device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &img_data.desc);
     device_data->vtable.DestroyImageView(device_data->device, img_data.image_view, NULL);
     device_data->vtable.DestroyImage(device_data->device, img_data.image, NULL);
     device_data->vtable.FreeMemory(device_data->device, img_data.mem, NULL);
-    device_data->vtable.DestroyBuffer(device_data->device, img_data.upload_buffer, NULL);
-    device_data->vtable.FreeMemory(device_data->device, img_data.upload_buffer_mem, NULL);
+    if (img_data.upload_buffer) {
+        device_data->vtable.DestroyBuffer(device_data->device, img_data.upload_buffer, NULL);
+        device_data->vtable.FreeMemory(device_data->device, img_data.upload_buffer_mem, NULL);
+    }
 }
 
 static void create_swapchain_images(struct swapchain_data *data)
@@ -751,7 +884,11 @@ static void create_swapchain_images(struct swapchain_data *data)
         }
         const OverlayImage &img = it.second;
         swapchain_data::image_data img_data;
-        img_data.desc = create_image_with_desc(data, img.width, img.height, VK_FORMAT_R8G8B8A8_UNORM, img_data.image, img_data.mem, img_data.image_view);
+        if (img.dmabuf) {
+            img_data.desc = import_dmabuf_with_desc(data, img.width, img.height, img.format, img.modifier, img.strides, img.offsets, img.dmabufs, img.nfd, img_data.image, img_data.mem, img_data.image_view);
+        } else {
+            img_data.desc = create_image_with_desc(data, img.width, img.height, VK_FORMAT_R8G8B8A8_UNORM, img_data.image, img_data.mem, img_data.image_view);
+        }
         data->images_data.insert({id, img_data});
     }
 
@@ -780,7 +917,7 @@ static void ensure_swapchain_images(struct swapchain_data *data,
         const uint8_t id = it.first;
         const OverlayImage &img = it.second;
         swapchain_data::image_data &img_data = data->images_data[id];
-        if (img.pixels == img_data.uploaded_pixels) {
+        if (img.dmabuf || img.pixels == img_data.uploaded_pixels) {
             continue;
         }
         img_data.uploaded_pixels = img.pixels;
@@ -1550,6 +1687,30 @@ static VkResult overlay_CreateDevice(
    assert(chain_info->u.pLayerInfo);
    PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = chain_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;
    PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr = chain_info->u.pLayerInfo->pfnNextGetDeviceProcAddr;
+
+   bool add_ext_mem_fd = true;
+   for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; ++i) {
+       if (!strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME)) {
+           add_ext_mem_fd = false;
+       }
+   }
+   int add_count = 0;
+   if (add_ext_mem_fd) {
+       add_count++;
+       std::cout << "Injecting " << VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME << "extension" << std::endl;
+   }
+   if (add_count) {
+       int new_count = pCreateInfo->enabledExtensionCount + add_count;
+       const char **exts = (const char**)malloc(sizeof(char*) * new_count);
+       memcpy(exts, pCreateInfo->ppEnabledExtensionNames, sizeof(char*) * pCreateInfo->enabledExtensionCount);
+       if (add_ext_mem_fd) {
+           exts[new_count - add_count--] = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;
+       }
+       VkDeviceCreateInfo *i = (VkDeviceCreateInfo*)pCreateInfo;
+       i->enabledExtensionCount = new_count;
+       i->ppEnabledExtensionNames = exts;
+   }
+
    PFN_vkCreateDevice fpCreateDevice = (PFN_vkCreateDevice)fpGetInstanceProcAddr(NULL, "vkCreateDevice");
    if (fpCreateDevice == NULL) {
       return VK_ERROR_INITIALIZATION_FAILED;
@@ -1610,8 +1771,28 @@ static VkResult overlay_CreateInstance(
    // Advance the link info for the next element on the chain
    chain_info->u.pLayerInfo = chain_info->u.pLayerInfo->pNext;
 
+   /* -------------------------------------------------------- */
+   /* (HACK) Set api version to 1.2 if set to 1.0              */
+   /* We do this to get our extensions working properly        */
+   VkInstanceCreateInfo info = *pCreateInfo;
+   const uint32_t apiVersion = 4202496; // VK_API_VERSION_1_2
+   VkApplicationInfo ai;
+   if (info.pApplicationInfo) {
+       ai = *info.pApplicationInfo;
+       if (ai.apiVersion < apiVersion)
+           ai.apiVersion = apiVersion;
+   } else {
+       ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+       ai.pNext = NULL;
+       ai.pApplicationName = NULL;
+       ai.applicationVersion = 0;
+       ai.pEngineName = NULL;
+       ai.engineVersion = 0;
+       ai.apiVersion = apiVersion;
+   }
+   info.pApplicationInfo = &ai;
 
-   VkResult result = fpCreateInstance(pCreateInfo, pAllocator, pInstance);
+   VkResult result = fpCreateInstance(&info, pAllocator, pInstance);
    if (result != VK_SUCCESS) return result;
 
    struct instance_data *instance_data = new_instance_data(*pInstance);

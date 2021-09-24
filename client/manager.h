@@ -25,7 +25,7 @@ public:
 
     bool isConnected() const;
 
-    bool writeFd(int fd);
+    bool writeFds(int fds[4], int nfd);
     bool writeMsg(struct msg_struct *msg);
 
 Q_SIGNALS:
