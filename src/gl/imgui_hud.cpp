@@ -201,6 +201,9 @@ static void update_images()
         const uint8_t id = it.first;
         const OverlayImage &img = it.second;
         state::image_data &img_data = state.images_data[id];
+        if (img.dmabuf) {
+            continue;
+        }
         if (img.pixels != img_data.uploaded_pixels) {
             img_data.texture = create_update_texture(img_data.texture, img.width, img.height, img.pixels);
             img_data.uploaded_pixels = img.pixels;
