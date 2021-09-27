@@ -1,6 +1,7 @@
 # Imgoverlay
 
-A Vulkan and OpenGL overlay rendering images from shared memory.
+Vulkan/OpenGL overlay renderer (shared memory or texture).  
+Included QtWebEngine client allows to use any web page as overlay.
 
 Started as [MangoHud](https://github.com/flightlessmango/MangoHud) fork.
 
@@ -27,7 +28,7 @@ ArchLinux: [PKGBUILD](dist/PKGBUILD)
 # Vulkan
 IMGOVERLAY=1 /path/to/app
 # OpenGL
-TODO
+imgoverlay /path/to/app
 ```
 
 #### Configuration (app)
@@ -45,6 +46,7 @@ toggle_overlay=Shift_R+F12
 imgoverlayclient [--tray] [config-file]
 ```
 * `--tray` start minimized in system tray
+* `--shm` use shared memory instead of DMA-BUF (required for OpenGL currently)
 * `config-file` path to config file (default `~/.config/imgoverlayclient.conf`)
 
 #### Configuration (client)
