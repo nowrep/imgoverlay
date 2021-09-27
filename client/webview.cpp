@@ -189,11 +189,14 @@ void WebView::initMemory()
 void WebView::initDmaBuf()
 {
     QQuickWindow *w = qobject_cast<QQuickWindow*>(sender());
-    if (!w || !w->renderTarget()) {
+    Q_ASSERT(w);
+    disconnect(w, &QQuickWindow::afterRendering, this, &WebView::initDmaBuf);
+
+    if (!w->renderTarget()) {
+        qCritical() << "No render target";
+        QMetaObject::invokeMethod(this, &WebView::initShm, Qt::QueuedConnection);
         return;
     }
-
-    disconnect(w, &QQuickWindow::afterRendering, this, &WebView::initDmaBuf);
 
     EGLDisplay dpy = eglGetCurrentDisplay();
     m_eglImage = eglCreateImage(dpy, eglGetCurrentContext(), EGL_GL_TEXTURE_2D, reinterpret_cast<EGLClientBuffer>(w->renderTarget()->texture()), NULL);
