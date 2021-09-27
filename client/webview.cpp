@@ -16,16 +16,6 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
-static bool checkDmaBufSupport(QOpenGLContext *ctx)
-{
-    if (!ctx || !ctx->functions()) {
-        return false;
-    }
-    // Just check if not NVIDIA ...
-    const QString vendor(reinterpret_cast<const char *>(ctx->functions()->glGetString(GL_VENDOR)));
-    return vendor.indexOf(QLatin1String("NVIDIA"), Qt::CaseInsensitive) == -1;
-}
-
 WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget *parent)
     : QWebEngineView(parent)
     , m_id(id)
@@ -44,17 +34,12 @@ WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget 
     if (w && w->quickWindow()) {
         QQuickWindow *window = w->quickWindow();
         connect(window, &QQuickWindow::sceneGraphInitialized, this, [=]() {
-            if (checkDmaBufSupport(window->openglContext())) {
-                qDebug() << "Using DMA-BUF";
-                connect(w->quickWindow(), &QQuickWindow::afterRendering, this, &WebView::initDmaBuf, Qt::DirectConnection);
-                connect(m_manager, &Manager::socketConnected, this, [this]() {
-                    if (m_fbo) {
-                        sendCreateImage();
-                    }
-                });
-            } else {
-                initShm();
-            }
+            connect(w->quickWindow(), &QQuickWindow::afterRendering, this, &WebView::initDmaBuf, Qt::DirectConnection);
+            connect(m_manager, &Manager::socketConnected, this, [this]() {
+                if (m_fbo) {
+                    sendCreateImage();
+                }
+            });
         });
     } else {
         initShm();
@@ -208,10 +193,13 @@ void WebView::initDmaBuf()
         return;
     }
 
+    disconnect(w, &QQuickWindow::afterRendering, this, &WebView::initDmaBuf);
+
     EGLDisplay dpy = eglGetCurrentDisplay();
     m_eglImage = eglCreateImage(dpy, eglGetCurrentContext(), EGL_GL_TEXTURE_2D, reinterpret_cast<EGLClientBuffer>(w->renderTarget()->texture()), NULL);
     if (!m_eglImage) {
         qCritical() << "Failed to create EGL image";
+        QMetaObject::invokeMethod(this, &WebView::initShm, Qt::QueuedConnection);
         return;
     }
 
@@ -222,26 +210,30 @@ void WebView::initDmaBuf()
 
     if (!eglExportDMABUFImageQueryMESA || !eglExportDMABUFImageMESA) {
         qCritical() << "Failed to resolve EGL functions";
+        QMetaObject::invokeMethod(this, &WebView::initShm, Qt::QueuedConnection);
+        eglDestroyImage(dpy, m_eglImage);
         return;
     }
-
     if (!eglExportDMABUFImageQueryMESA(dpy, m_eglImage, &m_format, &m_nfd, &m_modifier)) {
         qCritical() << "Failed to query DMABUF export";
+        QMetaObject::invokeMethod(this, &WebView::initShm, Qt::QueuedConnection);
+        eglDestroyImage(dpy, m_eglImage);
         return;
     }
     if (!eglExportDMABUFImageMESA(dpy, m_eglImage, m_dmabufs, m_strides, m_offsets)) {
         qCritical() << "Failed DMABUF export";
+        QMetaObject::invokeMethod(this, &WebView::initShm, Qt::QueuedConnection);
+        eglDestroyImage(dpy, m_eglImage);
         return;
     }
 
     m_fbo = w->renderTarget();
-    disconnect(w, &QQuickWindow::afterRendering, this, &WebView::initDmaBuf);
     QMetaObject::invokeMethod(this, [this]() {
+        qDebug() << "Using DMA-BUF";
         if (m_manager->isConnected()) {
             sendCreateImage();
         }
     }, Qt::QueuedConnection);
-
 }
 
 void WebView::sendCreateImage()
