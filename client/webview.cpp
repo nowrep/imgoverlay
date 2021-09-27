@@ -31,7 +31,7 @@ WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget 
     load(m_conf.url());
 
     QQuickWidget *w = qobject_cast<QQuickWidget*>(focusProxy());
-    if (w && w->quickWindow()) {
+    if (!m_manager->useShm() && w && w->quickWindow()) {
         QQuickWindow *window = w->quickWindow();
         connect(window, &QQuickWindow::sceneGraphInitialized, this, [=]() {
             connect(w->quickWindow(), &QQuickWindow::afterRendering, this, &WebView::initDmaBuf, Qt::DirectConnection);

@@ -16,9 +16,10 @@
 #include <QFileInfo>
 #include <QMenu>
 
-Manager::Manager(const QString &confFile, bool tray, QObject *parent)
+Manager::Manager(const QString &confFile, bool tray, bool shm, QObject *parent)
     : QObject(parent)
     , m_settings(confFile.isEmpty() ? QDir::homePath() + QLatin1String("/.config/imgoverlayclient.conf") : confFile, QSettings::IniFormat)
+    , m_shm(shm)
 {
     m_socketPath = resolvePath(m_settings.value(QStringLiteral("Socket"), QStringLiteral("/tmp/imgoverlay.socket")).toString());
 
@@ -95,6 +96,11 @@ Manager::Manager(const QString &confFile, bool tray, QObject *parent)
 Manager::~Manager()
 {
     qDeleteAll(m_views);
+}
+
+bool Manager::useShm() const
+{
+    return m_shm;
 }
 
 bool Manager::isConnected() const

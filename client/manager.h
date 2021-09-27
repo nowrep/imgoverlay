@@ -20,8 +20,10 @@ class Manager : public QObject
     Q_OBJECT
 
 public:
-    explicit Manager(const QString &confFile, bool tray, QObject *parent = nullptr);
+    explicit Manager(const QString &confFile, bool tray, bool shm, QObject *parent = nullptr);
     ~Manager();
+
+    bool useShm() const;
 
     bool isConnected() const;
 
@@ -50,4 +52,5 @@ private:
     QWidget *m_container;
     QWidget *m_window;
     QSystemTrayIcon *m_tray;
+    bool m_shm = false;
 };

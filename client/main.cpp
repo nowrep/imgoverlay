@@ -20,9 +20,13 @@ int main(int argc, char *argv[])
     QCommandLineOption trayOption({QStringLiteral("t"), QStringLiteral("tray")},
                                    QStringLiteral("Start minimized in tray."));
 
+    QCommandLineOption shmOption({QStringLiteral("s"), QStringLiteral("shm")},
+                                  QStringLiteral("Use shared memory instead of DMA-BUF."));
+
     parser.addOption(trayOption);
+    parser.addOption(shmOption);
     parser.process(app);
 
-    Manager manager(parser.positionalArguments().value(0), parser.isSet(trayOption));
+    Manager manager(parser.positionalArguments().value(0), parser.isSet(trayOption), parser.isSet(shmOption));
     return app.exec();
 }
