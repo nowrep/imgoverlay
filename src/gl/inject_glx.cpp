@@ -66,7 +66,7 @@ EXPORT_C_(void *) glXCreateContext(void *dpy, void *vis, void *shareList, int di
 static void do_imgui_swap(void *dpy, void *drawable)
 {
     if (!is_blacklisted()) {
-        imgui_create(glx.GetCurrentContext());
+        imgui_create(glx.GetCurrentContext(), true);
 
         unsigned int width = -1, height = -1;
 
