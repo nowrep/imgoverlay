@@ -20,8 +20,10 @@ void get_real_functions()
     eh_obj_t libdl;
 
     if (eh_find_obj(&libdl, "*libdl.so*")) {
-        fprintf(stderr, "can't get libdl.so\n");
-        exit(1);
+        if (eh_find_obj(&libdl, "*libc.so*")) {
+            fprintf(stderr, "can't get libdl.so and libc.so\n");
+            exit(1);
+        }
     }
 
     if (eh_find_sym(&libdl, "dlopen", (void **) &__dlopen)) {
