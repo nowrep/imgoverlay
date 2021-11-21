@@ -23,8 +23,12 @@ int main(int argc, char *argv[])
     QCommandLineOption shmOption({QStringLiteral("s"), QStringLiteral("shm")},
                                   QStringLiteral("Use shared memory instead of DMA-BUF."));
 
+    QCommandLineOption disableGpuOption(QStringLiteral("disable-gpu"),
+                                        QStringLiteral("Disable QtWebEngine GPU rendering."));
+
     parser.addOption(trayOption);
     parser.addOption(shmOption);
+    parser.addOption(disableGpuOption);
     parser.process(app);
 
     Manager manager(parser.positionalArguments().value(0), parser.isSet(trayOption), parser.isSet(shmOption));

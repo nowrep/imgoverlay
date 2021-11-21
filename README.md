@@ -47,6 +47,7 @@ imgoverlayclient [--tray] [config-file]
 ```
 * `--tray` start minimized in system tray
 * `--shm` use shared memory instead of DMA-BUF (required for OpenGL currently)
+* `--disable-gpu` disable QtWebEngine GPU rendering
 * `config-file` path to config file (default `~/.config/imgoverlayclient.conf`)
 
 #### Configuration (client)
