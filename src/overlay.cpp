@@ -73,6 +73,9 @@ struct device_data {
    PFN_vkSetDeviceLoaderData set_device_loader_data;
 
    struct vk_device_dispatch_table vtable;
+   PFN_vkGetImageMemoryRequirements2KHR GetImageMemoryRequirements2KHR;
+   PFN_vkBindImageMemory2KHR BindImageMemory2KHR;
+
    VkPhysicalDevice physical_device;
    VkDevice device;
 
@@ -710,7 +713,7 @@ static VkDescriptorSet import_dmabuf_with_desc(struct swapchain_data *data,
 
     VkMemoryRequirements2 image_req = {};
     image_req.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-    device_data->vtable.GetImageMemoryRequirements2(device_data->device, &memri, &image_req);
+    device_data->GetImageMemoryRequirements2KHR(device_data->device, &memri, &image_req);
 
     VkMemoryAllocateInfo image_alloc_info = {};
     image_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -741,8 +744,7 @@ static VkDescriptorSet import_dmabuf_with_desc(struct swapchain_data *data,
     bind_info.memory = image_mem;
     bind_info.memoryOffset = 0;
 
-    VK_CHECK(device_data->vtable.BindImageMemory2(device_data->device,
-                                                  1, &bind_info));
+    VK_CHECK(device_data->BindImageMemory2KHR(device_data->device, 1, &bind_info));
 
     // View
     VkImageViewCreateInfo view_info = {};
@@ -1688,23 +1690,40 @@ static VkResult overlay_CreateDevice(
    PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = chain_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;
    PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr = chain_info->u.pLayerInfo->pfnNextGetDeviceProcAddr;
 
-   bool add_ext_mem_fd = true;
+   static struct {
+       const char *name;
+       bool found;
+   } req_extensions[] = {
+       {VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, false},              // VK_VERSION_1_1
+       {VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, false},  // VK_VERSION_1_1
+       {VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, false},
+   };
+   static uint32_t req_extensions_count = 3;
+
    for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; ++i) {
-       if (!strcmp(pCreateInfo->ppEnabledExtensionNames[i], VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME)) {
-           add_ext_mem_fd = false;
+       for (uint32_t j = 0; j < req_extensions_count; ++j) {
+           if (!strcmp(pCreateInfo->ppEnabledExtensionNames[i], req_extensions[j].name)) {
+               req_extensions[j].found = true;
+           }
        }
    }
+
    int add_count = 0;
-   if (add_ext_mem_fd) {
-       add_count++;
-       std::cout << "Injecting " << VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME << "extension" << std::endl;
+   for (uint32_t i = 0; i < req_extensions_count; ++i) {
+       if (!req_extensions[i].found) {
+           add_count++;
+           std::cout << "Injecting " << req_extensions[i].name << " extension" << std::endl;
+       }
    }
+
    if (add_count) {
        int new_count = pCreateInfo->enabledExtensionCount + add_count;
        const char **exts = (const char**)malloc(sizeof(char*) * new_count);
        memcpy(exts, pCreateInfo->ppEnabledExtensionNames, sizeof(char*) * pCreateInfo->enabledExtensionCount);
-       if (add_ext_mem_fd) {
-           exts[new_count - add_count--] = VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;
+       for (uint32_t i = 0; i < req_extensions_count; ++i) {
+           if (!req_extensions[i].found) {
+               exts[new_count - add_count--] = req_extensions[i].name;
+           }
        }
        VkDeviceCreateInfo *i = (VkDeviceCreateInfo*)pCreateInfo;
        i->enabledExtensionCount = new_count;
@@ -1725,6 +1744,20 @@ static VkResult overlay_CreateDevice(
    struct device_data *device_data = new_device_data(*pDevice, instance_data);
    device_data->physical_device = physicalDevice;
    vk_load_device_commands(*pDevice, fpGetDeviceProcAddr, &device_data->vtable);
+
+#define GETADDR(x)                                                          \
+    do {                                                                    \
+        device_data->x = (PFN_vk##x)fpGetDeviceProcAddr(*pDevice, "vk" #x); \
+        if (!device_data->x) {                                              \
+            std::cerr << "failed to get proc addr: vk" #x << std::endl;     \
+            return VK_ERROR_INITIALIZATION_FAILED;                          \
+        }                                                                   \
+    } while (false)
+
+   GETADDR(GetImageMemoryRequirements2KHR);
+   GETADDR(BindImageMemory2KHR);
+
+#undef GETADDR
 
    instance_data->vtable.GetPhysicalDeviceProperties(device_data->physical_device,
                                                      &device_data->properties);
@@ -1771,28 +1804,7 @@ static VkResult overlay_CreateInstance(
    // Advance the link info for the next element on the chain
    chain_info->u.pLayerInfo = chain_info->u.pLayerInfo->pNext;
 
-   /* -------------------------------------------------------- */
-   /* (HACK) Set api version to 1.2 if set to 1.0              */
-   /* We do this to get our extensions working properly        */
-   VkInstanceCreateInfo info = *pCreateInfo;
-   const uint32_t apiVersion = 4202496; // VK_API_VERSION_1_2
-   VkApplicationInfo ai;
-   if (info.pApplicationInfo) {
-       ai = *info.pApplicationInfo;
-       if (ai.apiVersion < apiVersion)
-           ai.apiVersion = apiVersion;
-   } else {
-       ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-       ai.pNext = NULL;
-       ai.pApplicationName = NULL;
-       ai.applicationVersion = 0;
-       ai.pEngineName = NULL;
-       ai.engineVersion = 0;
-       ai.apiVersion = apiVersion;
-   }
-   info.pApplicationInfo = &ai;
-
-   VkResult result = fpCreateInstance(&info, pAllocator, pInstance);
+   VkResult result = fpCreateInstance(pCreateInfo, pAllocator, pInstance);
    if (result != VK_SUCCESS) return result;
 
    struct instance_data *instance_data = new_instance_data(*pInstance);
