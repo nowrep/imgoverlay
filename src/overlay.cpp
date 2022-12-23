@@ -154,6 +154,7 @@ struct swapchain_data {
        VkDescriptorSet desc = 0;
        void *upload_buffer_mem_map = nullptr;
        uint8_t *uploaded_pixels = nullptr;
+       bool needs_layout = false;
    };
    std::unordered_map<uint8_t, image_data> images_data;
 
@@ -537,6 +538,27 @@ static void update_image_descriptor(struct swapchain_data *data, VkImageView ima
    device_data->vtable.UpdateDescriptorSets(device_data->device, 1, write_desc, 0, NULL);
 }
 
+static void change_image_layout(struct device_data *device_data,
+                                VkCommandBuffer command_buffer,
+                                VkImage image,
+                                VkImageLayout layout)
+{
+   VkImageMemoryBarrier barrier = {};
+   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+   barrier.dstAccessMask = 0;
+   barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+   barrier.newLayout = layout;
+   barrier.image = image;
+   barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+   barrier.subresourceRange.levelCount = 1;
+   barrier.subresourceRange.layerCount = 1;
+   device_data->vtable.CmdPipelineBarrier(command_buffer,
+                                          VK_PIPELINE_STAGE_HOST_BIT,
+                                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                          0, 0, NULL, 0, NULL,
+                                          1, &barrier);
+}
+
 static void upload_image_data(struct device_data *device_data,
                               VkCommandBuffer command_buffer,
                               void *pixels,
@@ -678,7 +700,7 @@ static VkDescriptorSet import_dmabuf_with_desc(struct swapchain_data *data,
     image_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
     image_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
     image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    image_info.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     VkExternalMemoryImageCreateInfo eimg = {};
     eimg.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
@@ -887,6 +909,7 @@ static void create_swapchain_images(struct swapchain_data *data)
         const OverlayImage &img = it.second;
         swapchain_data::image_data img_data;
         if (img.dmabuf) {
+            img_data.needs_layout = true;
             img_data.desc = import_dmabuf_with_desc(data, img.width, img.height, img.format, img.modifier, img.strides, img.offsets, img.dmabufs, img.nfd, img_data.image, img_data.mem, img_data.image_view);
         } else {
             img_data.desc = create_image_with_desc(data, img.width, img.height, VK_FORMAT_R8G8B8A8_UNORM, img_data.image, img_data.mem, img_data.image_view);
@@ -919,6 +942,10 @@ static void ensure_swapchain_images(struct swapchain_data *data,
         const uint8_t id = it.first;
         const OverlayImage &img = it.second;
         swapchain_data::image_data &img_data = data->images_data[id];
+        if (img_data.needs_layout) {
+            img_data.needs_layout = false;
+            change_image_layout(device_data, command_buffer, img_data.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
         if (img.dmabuf || img.pixels == img_data.uploaded_pixels) {
             continue;
         }
@@ -956,7 +983,7 @@ static void CreateOrResizeBuffer(struct device_data *data,
     VK_CHECK(data->vtable.AllocateMemory(data->device, &alloc_info, NULL, buffer_memory));
 
     VK_CHECK(data->vtable.BindBufferMemory(data->device, *buffer, *buffer_memory, 0));
-    *buffer_size = new_size;
+    *buffer_size = req.size;
 }
 
 static struct overlay_draw *render_swapchain_display(struct swapchain_data *data,
@@ -1040,9 +1067,10 @@ static struct overlay_draw *render_swapchain_display(struct swapchain_data *data
    ImDrawVert* vtx_dst = NULL;
    ImDrawIdx* idx_dst = NULL;
    VK_CHECK(device_data->vtable.MapMemory(device_data->device, draw->vertex_buffer_mem,
-                                          0, vertex_size, 0, (void**)(&vtx_dst)));
+                                          0, draw->vertex_buffer_size, 0, (void**)(&vtx_dst)));
    VK_CHECK(device_data->vtable.MapMemory(device_data->device, draw->index_buffer_mem,
-                                          0, index_size, 0, (void**)(&idx_dst)));
+                                          0, draw->index_buffer_size, 0, (void**)(&idx_dst)));
+
    for (int n = 0; n < draw_data->CmdListsCount; n++)
       {
          const ImDrawList* cmd_list = draw_data->CmdLists[n];
@@ -1240,9 +1268,9 @@ static void setup_swapchain_data_pipeline(struct swapchain_data *data)
    /* Font sampler */
    VkSamplerCreateInfo sampler_info = {};
    sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-   sampler_info.magFilter = VK_FILTER_LINEAR;
-   sampler_info.minFilter = VK_FILTER_LINEAR;
-   sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+   sampler_info.magFilter = VK_FILTER_NEAREST;
+   sampler_info.minFilter = VK_FILTER_NEAREST;
+   sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
    sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
    sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
    sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -1690,45 +1718,28 @@ static VkResult overlay_CreateDevice(
    PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr = chain_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;
    PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr = chain_info->u.pLayerInfo->pfnNextGetDeviceProcAddr;
 
-   static struct {
-       const char *name;
-       bool found;
-   } req_extensions[] = {
-       {VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, false},              // VK_VERSION_1_1
-       {VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, false},  // VK_VERSION_1_1
-       {VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, false},
+   const char *req_extensions[] = {
+       VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
+       VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME,
+       VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+       VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+       VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+       VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
+       VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
+       VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
+       VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
    };
-   static uint32_t req_extensions_count = 3;
+   static uint32_t req_extensions_count = 9;
 
-   for (uint32_t i = 0; i < pCreateInfo->enabledExtensionCount; ++i) {
-       for (uint32_t j = 0; j < req_extensions_count; ++j) {
-           if (!strcmp(pCreateInfo->ppEnabledExtensionNames[i], req_extensions[j].name)) {
-               req_extensions[j].found = true;
-           }
-       }
-   }
-
-   int add_count = 0;
+   int new_count = pCreateInfo->enabledExtensionCount + req_extensions_count;
+   const char **exts = (const char**)malloc(sizeof(char*) * new_count);
+   memcpy(exts, pCreateInfo->ppEnabledExtensionNames, sizeof(char*) * pCreateInfo->enabledExtensionCount);
    for (uint32_t i = 0; i < req_extensions_count; ++i) {
-       if (!req_extensions[i].found) {
-           add_count++;
-           std::cout << "Injecting " << req_extensions[i].name << " extension" << std::endl;
-       }
+       exts[pCreateInfo->enabledExtensionCount + i] = req_extensions[i];
    }
-
-   if (add_count) {
-       int new_count = pCreateInfo->enabledExtensionCount + add_count;
-       const char **exts = (const char**)malloc(sizeof(char*) * new_count);
-       memcpy(exts, pCreateInfo->ppEnabledExtensionNames, sizeof(char*) * pCreateInfo->enabledExtensionCount);
-       for (uint32_t i = 0; i < req_extensions_count; ++i) {
-           if (!req_extensions[i].found) {
-               exts[new_count - add_count--] = req_extensions[i].name;
-           }
-       }
-       VkDeviceCreateInfo *i = (VkDeviceCreateInfo*)pCreateInfo;
-       i->enabledExtensionCount = new_count;
-       i->ppEnabledExtensionNames = exts;
-   }
+   VkInstanceCreateInfo *i = (VkInstanceCreateInfo*)pCreateInfo;
+   i->enabledExtensionCount = new_count;
+   i->ppEnabledExtensionNames = exts;
 
    PFN_vkCreateDevice fpCreateDevice = (PFN_vkCreateDevice)fpGetInstanceProcAddr(NULL, "vkCreateDevice");
    if (fpCreateDevice == NULL) {
@@ -1789,6 +1800,21 @@ static VkResult overlay_CreateInstance(
     const VkAllocationCallbacks*                pAllocator,
     VkInstance*                                 pInstance)
 {
+   const char *req_extensions[] = {
+       VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
+   };
+   static uint32_t req_extensions_count = 1;
+
+   int new_count = pCreateInfo->enabledExtensionCount + req_extensions_count;
+   const char **exts = (const char**)malloc(sizeof(char*) * new_count);
+   memcpy(exts, pCreateInfo->ppEnabledExtensionNames, sizeof(char*) * pCreateInfo->enabledExtensionCount);
+   for (uint32_t i = 0; i < req_extensions_count; ++i) {
+       exts[pCreateInfo->enabledExtensionCount + i] = req_extensions[i];
+   }
+   VkInstanceCreateInfo *i = (VkInstanceCreateInfo*)pCreateInfo;
+   i->enabledExtensionCount = new_count;
+   i->ppEnabledExtensionNames = exts;
+
    VkLayerInstanceCreateInfo *chain_info =
       get_instance_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
 
