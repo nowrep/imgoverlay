@@ -1,7 +1,7 @@
 {
     "file_format_version" : "1.0.0",
     "layer" : {
-      "name": "@PROJECT_NAME@@LAYER_SUFFIX@",
+      "name": "VK_LAYER_IMGOVERLAY_@LAYER_SUFFIX@",
       "type": "GLOBAL",
       "api_version": "1.3.221",
       "library_path": "@libdir_imgoverlay@libImgoverlay.so",

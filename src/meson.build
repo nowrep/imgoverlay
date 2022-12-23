@@ -115,8 +115,7 @@ imgoverlay_dlsym = shared_library(
 configure_file(input : 'imgoverlay.json.in',
   output : '@0@.@1@.json'.format(meson.project_name(), target_machine.cpu_family()),
   configuration : {'libdir_imgoverlay' : libdir_imgoverlay + '/',
-                  'PROJECT_NAME' : meson.project_name() + ' ',
-                  'LAYER_SUFFIX' : target_machine.cpu_family()},
+                  'LAYER_SUFFIX' : target_machine.cpu_family() == 'x86_64' ? '64' : '32'},
   install : true,
   install_dir : join_paths(get_option('datadir'), 'vulkan', 'implicit_layer.d'),
 )
