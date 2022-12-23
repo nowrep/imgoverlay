@@ -258,7 +258,6 @@ static struct instance_data *new_instance_data(VkInstance instance)
 {
    struct instance_data *data = new instance_data();
    data->instance = instance;
-   data->params = {};
    map_object(HKEY(data->instance), data);
    return data;
 }

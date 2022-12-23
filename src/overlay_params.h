@@ -34,10 +34,10 @@ enum overlay_param_enabled {
 
 struct overlay_params {
    bool enabled[OVERLAY_PARAM_ENABLED_MAX];
-   bool no_display;
+   bool no_display = false;
    std::string socket;
    std::vector<KeySym> toggle_overlay;
-   float font_size, font_scale;
+   float font_size = 0.0, font_scale = 0.0;
    std::unordered_map<std::string,std::string> options;
 };
 

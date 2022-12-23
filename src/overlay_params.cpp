@@ -172,8 +172,6 @@ parse_overlay_config(struct overlay_params *params,
                   const char *env)
 {
 
-   *params = {};
-
    params->socket = "/tmp/imgoverlay.socket";
    params->font_scale = 1.0f;
 
