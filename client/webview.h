@@ -45,7 +45,7 @@ private:
     uint64_t m_modifier = 0;
     int m_nfd = 0;
     void *m_eglImage = nullptr;
-    QOpenGLFramebufferObject *m_fbo = nullptr;
+    unsigned m_fbo = 0;
 };
 
 class WebPage : public QWebEnginePage

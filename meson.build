@@ -2,7 +2,7 @@ project('imgoverlay',
   ['c', 'cpp'],
   version : 'v0.6',
   license : 'MIT',
-  default_options : ['buildtype=release', 'c_std=c99', 'cpp_std=c++14']
+  default_options : ['buildtype=release', 'c_std=c99', 'cpp_std=c++17']
 )
 
 cc = meson.get_compiler('c')

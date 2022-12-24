@@ -5,3 +5,4 @@ option('imgoverlay_prefix', type : 'string', value : '', description: 'Add prefi
 option('append_libdir_imgoverlay', type : 'boolean', value : true, description: 'Append "imgoverlay" to libdir path or not.')
 option('with_x11', type : 'feature', value : 'enabled')
 option('build_client', type : 'boolean', value : true, description: 'Build client application')
+option('use_qt6', type : 'boolean', value : true, description: 'Use Qt6')

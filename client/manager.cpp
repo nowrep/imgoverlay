@@ -8,7 +8,6 @@
 #include <QApplication>
 #include <QLocalSocket>
 #include <QWebEngineProfile>
-#include <QWebEngineSettings>
 #include <QTabBar>
 #include <QVBoxLayout>
 #include <QSystemTrayIcon>
@@ -53,7 +52,6 @@ Manager::Manager(const QString &confFile, bool tray, bool shm, QObject *parent)
 
     QWebEngineProfile::defaultProfile()->setHttpCacheType(QWebEngineProfile::MemoryHttpCache);
     QWebEngineProfile::defaultProfile()->setPersistentStoragePath(resolvePath(m_settings.value(QStringLiteral("Cache"), QStringLiteral("cache")).toString()));
-    QWebEngineSettings::defaultSettings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
 
     QVBoxLayout *layout = new QVBoxLayout;
     m_statusLabel = new QLabel;

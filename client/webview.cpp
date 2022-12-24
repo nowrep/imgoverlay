@@ -8,9 +8,15 @@
 #include <QMenu>
 
 #include <QQuickWidget>
+#include <QWebEngineSettings>
 #include <QOpenGLContext>
 #include <QOpenGLFunctions>
 #include <QOpenGLFramebufferObject>
+
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+#include <QQuickRenderTarget>
+#include <QtGui/private/qrhi_p.h>
+#endif
 
 #define EGL_NO_X11
 #include <EGL/egl.h>
@@ -23,6 +29,7 @@ WebView::WebView(uint8_t id, const GroupConfig &conf, Manager *manager, QWidget 
     , m_manager(manager)
 {
     setPage(new WebPage);
+    settings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
 
     page()->setBackgroundColor(Qt::transparent);
     setAttribute(Qt::WA_TranslucentBackground, true);
@@ -192,14 +199,27 @@ void WebView::initDmaBuf()
     Q_ASSERT(w);
     disconnect(w, &QQuickWindow::afterRendering, this, &WebView::initDmaBuf);
 
+    unsigned textureId = 0;
+
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    QRhiTextureRenderTarget *renderTarget = reinterpret_cast<QRhiTextureRenderTarget*>(w->rendererInterface()->getResource(w, QSGRendererInterface::RhiRedirectRenderTarget));
+    if (!renderTarget || !renderTarget->description().colorAttachmentAt(0)) {
+        qCritical() << "No render target";
+        QMetaObject::invokeMethod(this, &WebView::initShm, Qt::QueuedConnection);
+        return;
+    }
+    textureId = renderTarget->description().colorAttachmentAt(0)->texture()->nativeTexture().object;
+#else
     if (!w->renderTarget()) {
         qCritical() << "No render target";
         QMetaObject::invokeMethod(this, &WebView::initShm, Qt::QueuedConnection);
         return;
     }
+    textureId = w->renderTarget()->texture();
+#endif
 
     EGLDisplay dpy = eglGetCurrentDisplay();
-    m_eglImage = eglCreateImage(dpy, eglGetCurrentContext(), EGL_GL_TEXTURE_2D, reinterpret_cast<EGLClientBuffer>(w->renderTarget()->texture()), NULL);
+    m_eglImage = eglCreateImage(dpy, eglGetCurrentContext(), EGL_GL_TEXTURE_2D, reinterpret_cast<EGLClientBuffer>(textureId), NULL);
     if (!m_eglImage) {
         qCritical() << "Failed to create EGL image";
         QMetaObject::invokeMethod(this, &WebView::initShm, Qt::QueuedConnection);
@@ -230,7 +250,7 @@ void WebView::initDmaBuf()
         return;
     }
 
-    m_fbo = w->renderTarget();
+    m_fbo = textureId;
     QMetaObject::invokeMethod(this, [this]() {
         qDebug() << "Using DMA-BUF";
         if (m_manager->isConnected()) {
