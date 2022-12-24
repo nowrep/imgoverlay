@@ -8,6 +8,12 @@ int main(int argc, char *argv[])
 {
     qputenv("QT_XCB_GL_INTEGRATION", "xcb_egl");
 
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    qputenv("QT_ENABLE_HIGHDPI_SCALING", "0");
+#else
+    QApplication::setAttribute(Qt::AA_DisableHighDpiScaling);
+#endif
+
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("Imgoverlay Client"));
     app.setApplicationVersion(QStringLiteral(IMGOVERLAY_VERSION));
