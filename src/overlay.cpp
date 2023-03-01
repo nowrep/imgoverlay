@@ -1861,7 +1861,7 @@ static void overlay_DestroyInstance(
    destroy_instance_data(instance_data);
 }
 
-extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL overlay_GetDeviceProcAddr(VkDevice dev,
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL overlay_GetDeviceProcAddr(VkDevice dev,
                                                                              const char *funcName);
 static const struct {
    const char *name;
@@ -1899,7 +1899,7 @@ static void *find_ptr(const char *name)
    return NULL;
 }
 
-extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL overlay_GetDeviceProcAddr(VkDevice dev,
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL overlay_GetDeviceProcAddr(VkDevice dev,
                                                                              const char *funcName)
 {
    void *ptr = find_ptr(funcName);
@@ -1912,7 +1912,7 @@ extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL overlay_GetDeviceProcAddr(Vk
    return device_data->vtable.GetDeviceProcAddr(dev, funcName);
 }
 
-extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL overlay_GetInstanceProcAddr(VkInstance instance,
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL overlay_GetInstanceProcAddr(VkInstance instance,
                                                                                const char *funcName)
 {
    void *ptr = find_ptr(funcName);
@@ -1923,4 +1923,16 @@ extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL overlay_GetInstanceProcAddr(
    struct instance_data *instance_data = FIND(struct instance_data, instance);
    if (instance_data->vtable.GetInstanceProcAddr == NULL) return NULL;
    return instance_data->vtable.GetInstanceProcAddr(instance, funcName);
+}
+
+extern "C" __attribute__((visibility("default"))) VKAPI_ATTR VkResult VKAPI_CALL overlay_Negotiate(VkNegotiateLayerInterface *nli)
+{
+    if (nli->loaderLayerInterfaceVersion < 2)
+        return VK_ERROR_INITIALIZATION_FAILED;
+
+    nli->loaderLayerInterfaceVersion = 2;
+    nli->pfnGetInstanceProcAddr = overlay_GetInstanceProcAddr;
+    nli->pfnGetDeviceProcAddr = overlay_GetDeviceProcAddr;
+
+    return VK_SUCCESS;
 }

@@ -1,5 +1,5 @@
 {
-    "file_format_version" : "1.0.0",
+    "file_format_version" : "1.1.2",
     "layer" : {
       "name": "VK_LAYER_IMGOVERLAY_@LAYER_SUFFIX@",
       "type": "GLOBAL",
@@ -8,8 +8,7 @@
       "implementation_version": "1",
       "description": "Vulkan Img Overlay",
       "functions": {
-         "vkGetInstanceProcAddr": "overlay_GetInstanceProcAddr",
-         "vkGetDeviceProcAddr": "overlay_GetDeviceProcAddr"
+        "vkNegotiateLoaderLayerInterfaceVersion": "overlay_Negotiate"
       },
       "enable_environment": {
         "IMGOVERLAY": "1"

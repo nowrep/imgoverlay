@@ -1,8 +1,7 @@
 # in base
 {
   global:
-    overlay_GetInstanceProcAddr;
-    overlay_GetDeviceProcAddr;
+    overlay_Negotiate;
     glX*;
     egl*;
     dlsym;
