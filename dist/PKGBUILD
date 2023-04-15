@@ -3,30 +3,47 @@ pkgbase=${_pkgbase}-git
 pkgname=('imgoverlay-git' 'lib32-imgoverlay-git' 'imgoverlay-common-git')
 pkgver=0.1
 pkgrel=1
+_vulkan_ver=1.2.142
 url='https://github.com/nowrep/imgoverlay'
 license=('MIT')
 arch=('x86_64')
 depends=('glslang' 'lib32-vulkan-icd-loader' 'vulkan-icd-loader' 'qt5-webengine')
 makedepends=('gcc' 'meson' 'python' 'libx11' 'lib32-libx11' 'git' 'vulkan-headers')
-source=("$_pkgbase::git+$url")
-sha512sums=('SKIP')
+source=(
+    "$_pkgbase::git+$url"
+    "Vulkan-Headers-${_vulkan_ver}.tar.gz::https://github.com/KhronosGroup/Vulkan-Headers/archive/v${_vulkan_ver}.tar.gz"
+    "https://wrapdb.mesonbuild.com/v2/vulkan-headers_${_vulkan_ver}-1/get_patch#/vulkan-headers-${_vulkan_ver}-1-wrap.zip"
+)
+sha512sums=(
+    'SKIP'
+    'f131b23cb270bfcd2cb0e69f21bfcbdbfa816692eabb371b2649315dd4309279e5a52fd9700e4291ff0985d25e49b253396ee2d4607e2cd90b96a693e97057e7'
+    '9c9c05a278f0675b1f3259645720088c82e017b095fdfb4498dbcf64bd019a3683f8f210a7ecc1f61526339aaa77730408eec26576f4bc8d2afd77f8bfc1539d'
+)
 
 pkgver() {
     cd "$_pkgbase"
     git describe --tags | sed -r 's/^v//;s/([^-]*-g)/r\1/;s/-/./g'
 }
 
+prepare() {
+    cd "$srcdir/imgoverlay"
+    ln -sfv \
+        "$srcdir/vulkan-headers-${_vulkan_ver}-1-wrap.zip" \
+        "$srcdir/Vulkan-Headers-${_vulkan_ver}" \
+        subprojects/
+}
+
 build() {
     arch-meson "$_pkgbase" build64 \
     --libdir lib/imgoverlay/lib64 \
     --prefix /usr \
-    -Dappend_libdir_imgoverlay=false \
-    -Duse_system_vulkan=enabled
+    -Dappend_libdir_imgoverlay=false
 
     ninja -C build64
 
-    export CC="gcc -m32"
-    export CXX="g++ -m32"
+    export CFLAGS="-m32 ${CFLAGS}"
+    export CXXFLAGS="-m32 ${CXXFLAGS}"
+    export LDFLAGS="-m32 ${LDFLAGS}"
     export PKG_CONFIG_PATH="/usr/lib32/pkgconfig:/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib/pkgconfig:${PKG_CONFIG_PATH_32}"
     export LLVM_CONFIG="/usr/bin/llvm-config32"
 
@@ -34,7 +51,6 @@ build() {
     --libdir lib/imgoverlay/lib32 \
     --prefix /usr \
     -Dappend_libdir_imgoverlay=false \
-    -Duse_system_vulkan=enabled \
     -Dbuild_client=false
 
     ninja -C build32
