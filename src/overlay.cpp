@@ -540,17 +540,23 @@ static void update_image_descriptor(struct swapchain_data *data, VkImageView ima
 static void change_image_layout(struct device_data *device_data,
                                 VkCommandBuffer command_buffer,
                                 VkImage image,
-                                VkImageLayout layout)
+                                VkImageLayout layout,
+                                VkAccessFlags access,
+                                bool acquire)
 {
    VkImageMemoryBarrier barrier = {};
    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-   barrier.dstAccessMask = 0;
+   barrier.dstAccessMask = access;
    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
    barrier.newLayout = layout;
    barrier.image = image;
    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
    barrier.subresourceRange.levelCount = 1;
    barrier.subresourceRange.layerCount = 1;
+   if (acquire) {
+       barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT;
+       barrier.dstQueueFamilyIndex = device_data->graphic_queue->family_index;
+   }
    device_data->vtable.CmdPipelineBarrier(command_buffer,
                                           VK_PIPELINE_STAGE_HOST_BIT,
                                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
@@ -943,7 +949,7 @@ static void ensure_swapchain_images(struct swapchain_data *data,
         swapchain_data::image_data &img_data = data->images_data[id];
         if (img_data.needs_layout) {
             img_data.needs_layout = false;
-            change_image_layout(device_data, command_buffer, img_data.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            change_image_layout(device_data, command_buffer, img_data.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT, img.dmabuf);
         }
         if (img.dmabuf || img.pixels == img_data.uploaded_pixels) {
             continue;
