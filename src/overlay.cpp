@@ -1732,9 +1732,11 @@ static VkResult overlay_CreateDevice(
        VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
        VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME,
        VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,
+       VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+       VK_KHR_BIND_MEMORY_2_EXTENSION_NAME,
        VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
    };
-   static uint32_t req_extensions_count = 9;
+   const uint32_t req_extensions_count = sizeof(req_extensions) / sizeof(*req_extensions);
 
    int new_count = pCreateInfo->enabledExtensionCount + req_extensions_count;
    const char **exts = (const char**)malloc(sizeof(char*) * new_count);
@@ -1808,7 +1810,7 @@ static VkResult overlay_CreateInstance(
    const char *req_extensions[] = {
        VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
    };
-   static uint32_t req_extensions_count = 1;
+   const uint32_t req_extensions_count = sizeof(req_extensions) / sizeof(*req_extensions);
 
    int new_count = pCreateInfo->enabledExtensionCount + req_extensions_count;
    const char **exts = (const char**)malloc(sizeof(char*) * new_count);
