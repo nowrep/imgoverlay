@@ -3,6 +3,7 @@
 #include <thread>
 #include <mutex>
 #include <unordered_map>
+#include <string>
 
 #define MAX_OVERLAY_COUNT 16
 
