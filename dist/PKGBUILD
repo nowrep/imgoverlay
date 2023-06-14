@@ -1,7 +1,7 @@
 _pkgbase=imgoverlay
 pkgbase=${_pkgbase}-git
 pkgname=('imgoverlay-git' 'lib32-imgoverlay-git' 'imgoverlay-common-git')
-pkgver=0.1
+pkgver=0.7.r3.gd31fd87
 pkgrel=1
 _vulkan_ver=1.2.142
 url='https://github.com/nowrep/imgoverlay'
@@ -11,11 +11,13 @@ depends=('glslang' 'lib32-vulkan-icd-loader' 'vulkan-icd-loader' 'qt5-webengine'
 makedepends=('gcc' 'meson' 'python' 'libx11' 'lib32-libx11' 'git' 'vulkan-headers')
 source=(
     "$_pkgbase::git+$url"
+    "crossfile.ini"
     "Vulkan-Headers-${_vulkan_ver}.tar.gz::https://github.com/KhronosGroup/Vulkan-Headers/archive/v${_vulkan_ver}.tar.gz"
     "https://wrapdb.mesonbuild.com/v2/vulkan-headers_${_vulkan_ver}-1/get_patch#/vulkan-headers-${_vulkan_ver}-1-wrap.zip"
 )
 sha512sums=(
     'SKIP'
+    '18f602a02118931f70f5ec415fa7e65650c00d594a3b6241a25add568aa1aa2895c8e9afb59f63885029b12bef58ae7af151d9ec55b3a9fac47239e371a5257d'
     'f131b23cb270bfcd2cb0e69f21bfcbdbfa816692eabb371b2649315dd4309279e5a52fd9700e4291ff0985d25e49b253396ee2d4607e2cd90b96a693e97057e7'
     '9c9c05a278f0675b1f3259645720088c82e017b095fdfb4498dbcf64bd019a3683f8f210a7ecc1f61526339aaa77730408eec26576f4bc8d2afd77f8bfc1539d'
 )
@@ -45,9 +47,9 @@ build() {
     export CXXFLAGS="-m32 ${CXXFLAGS}"
     export LDFLAGS="-m32 ${LDFLAGS}"
     export PKG_CONFIG_PATH="/usr/lib32/pkgconfig:/usr/lib/i386-linux-gnu/pkgconfig:/usr/lib/pkgconfig:${PKG_CONFIG_PATH_32}"
-    export LLVM_CONFIG="/usr/bin/llvm-config32"
 
     arch-meson "$_pkgbase" build32 \
+    --cross-file crossfile.ini \
     --libdir lib/imgoverlay/lib32 \
     --prefix /usr \
     -Dappend_libdir_imgoverlay=false \
